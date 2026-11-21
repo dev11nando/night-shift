@@ -1,7 +1,7 @@
 import re
 import unicodedata
 
-from night_shift.domain.enums import Level, WorkModel
+from night_shift.domain.enums import Contract, Level, WorkModel
 
 
 def fold(text: str) -> str:
@@ -48,3 +48,29 @@ def infer_work_model(*texts: str | None) -> WorkModel | None:
         if re.search(pattern, blob):
             return model
     return None
+
+
+def infer_contract(*texts: str | None) -> Contract | None:
+    """CLT ou PJ quando o texto cita só um dos dois; ambos ou nenhum → None."""
+    blob = fold(" ".join(t for t in texts if t))
+    clt = re.search(r"\bclt\b", blob) is not None
+    pj = re.search(r"\b(pj|pessoa juridica)\b", blob) is not None
+    if clt != pj:
+        return Contract.CLT if clt else Contract.PJ
+    return None
+
+
+_MONEY = r"R\$\s*(\d{1,3}(?:\.\d{3})+|\d{4,6})(?:,\d{2})?"
+_SALARY_RANGE = re.compile(rf"{_MONEY}(?:\s*(?:a|ate|até|-|–)\s*{_MONEY})?", re.IGNORECASE)  # noqa: RUF001
+# Fora desta faixa o valor provavelmente é anual, benefício ou bônus, não salário mensal.
+_MONTHLY_BOUNDS = (1_000, 60_000)
+
+
+def extract_salary(text: str) -> tuple[int | None, int | None]:
+    """Primeira faixa ``R$ X (a R$ Y)`` plausível como salário mensal."""
+    lo_ok, hi_ok = _MONTHLY_BOUNDS
+    for m in _SALARY_RANGE.finditer(text):
+        values = [int(v.replace(".", "")) for v in m.groups() if v]
+        if all(lo_ok <= v <= hi_ok for v in values):
+            return values[0], values[-1] if len(values) > 1 else None
+    return None, None

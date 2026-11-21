@@ -150,6 +150,10 @@ FastAPI + Jinja2 + HTMX, em `localhost`. Sem projeto separado de frontend.
 - **Outreach:** rascunhos criados, marcar como enviado/respondido.
 - **Mercado:** faixas salariais coletadas por nível e contrato.
 
+Entregue na Fase 2: Hoje, Fila (Done/Descartar/Desfazer, filtro por nota, abas Aplicadas e
+Descartadas) e Mercado. CV ajustado e carta entram no card na Fase 3; Funil na Fase 7; Outreach
+na Fase 6. Nível, contrato e salário são extraídos do texto da vaga quando a fonte não informa.
+
 ---
 
 ## 9. Stack

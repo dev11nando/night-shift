@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from night_shift.adapters.storage.models import Company, Job, Run, Score, utcnow
 from night_shift.config import CompanyConfig
+from night_shift.domain.enrich import enrich
 from night_shift.domain.job import JobPosting
 
 
@@ -80,6 +81,19 @@ class JobRepository:
             )
         )
         return True
+
+    def enrich_existing(self) -> int:
+        """Reaplica ``enrich`` em vagas já gravadas (nível, contrato, salário). Retorna quantas
+        mudaram. Útil depois de melhorar a extração."""
+        changed = 0
+        for job in self.s.scalars(select(Job)):
+            enriched = enrich(to_posting(job))
+            fields = ("level", "contract", "salary_min", "salary_max")
+            if any(getattr(job, f) != getattr(enriched, f) for f in fields):
+                for f in fields:
+                    setattr(job, f, getattr(enriched, f))
+                changed += 1
+        return changed
 
     def unscreened(self) -> Sequence[Job]:
         return self.s.scalars(select(Job).where(~exists().where(Score.job_id == Job.id))).all()
