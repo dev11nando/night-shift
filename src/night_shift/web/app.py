@@ -17,6 +17,7 @@ from night_shift.adapters.storage.models import Job
 from night_shift.adapters.storage.review import ReviewRepository
 from night_shift.domain.enums import ApplicationStatus
 from night_shift.domain.lanes import Lane, manual_reason
+from night_shift.web.live import live_context
 
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
@@ -72,6 +73,9 @@ def create_app(
     shots_dir: Path | None = None,
     schedule_status: Callable[[], str] | None = None,
     on_turn_off: Callable[[], list[str]] | None = None,
+    logs_dir: Path | None = None,
+    request_stop: Callable[[], None] | None = None,
+    start_run: Callable[[], str] | None = None,
 ) -> FastAPI:
     """``auto_threshold``: nota mínima para uma vaga de fonte de baixo risco ir para a fila
     automática (``automation.auto_apply_min_score`` no profile.yaml)."""
@@ -205,6 +209,47 @@ def create_app(
             raise HTTPException(404)
         lines = on_turn_off()
         return templates.TemplateResponse(request, "_turned_off.html", {"lines": lines})
+
+    # ---------------------------------------------------------------- ao vivo
+
+    def live(request: Request, repo: ReviewRepository, message: str | None = None):
+        ctx = live_context(repo, logs_dir)
+        ctx.update(
+            card_ctx(repo),
+            message=message,
+            can_stop=request_stop is not None,
+            can_start=start_run is not None,
+        )
+        return ctx
+
+    @app.get("/ao-vivo", response_class=HTMLResponse)
+    def ao_vivo(request: Request, repo: Repo):
+        return page(request, "ao_vivo.html", repo, active="ao-vivo", **live(request, repo))
+
+    @app.get("/ao-vivo/estado", response_class=HTMLResponse)
+    def ao_vivo_estado(request: Request, repo: Repo):
+        return templates.TemplateResponse(request, "_live.html", live(request, repo))
+
+    @app.post("/ao-vivo/parar", response_class=HTMLResponse)
+    def ao_vivo_parar(request: Request, repo: Repo):
+        if request.headers.get("HX-Request") != "true":
+            raise HTTPException(403, "use o painel")
+        if request_stop is None:
+            raise HTTPException(404)
+        request_stop()
+        msg = "Parada pedida: termina a vaga atual e encerra."
+        return templates.TemplateResponse(request, "_live.html", live(request, repo, msg))
+
+    @app.post("/ao-vivo/iniciar", response_class=HTMLResponse)
+    def ao_vivo_iniciar(request: Request, repo: Repo):
+        if request.headers.get("HX-Request") != "true":
+            raise HTTPException(403, "use o painel")
+        if start_run is None:
+            raise HTTPException(404)
+        msg = start_run()
+        ctx = live(request, repo, msg)
+        ctx["running"] = True  # a tarefa leva alguns segundos para registrar a execução
+        return templates.TemplateResponse(request, "_live.html", ctx)
 
     @app.get("/healthz")
     def healthz():

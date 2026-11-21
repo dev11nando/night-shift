@@ -270,3 +270,78 @@ def test_assisted_apply_shows_in_applied_tab_with_screenshots(sessions, seeded, 
     assert client.get(f"/jobs/{seeded['top']}/shot/preenchido").status_code == 200
     assert client.get(f"/jobs/{seeded['top']}/shot/confirmado").status_code == 404, "fora da pasta"
     assert client.get(f"/jobs/{seeded['top']}/shot/qualquer").status_code == 404
+
+
+# -------------------------------------------------------------------- ao vivo
+
+
+def test_live_page_without_runs(client):
+    html = client.get("/ao-vivo").text
+    assert "Nenhuma execução ainda" in html and "every 2s" not in html
+
+
+def test_live_page_while_running_polls_and_shows_progress(sessions, seeded, tmp_path):
+    from datetime import timedelta
+
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    log = logs / "20261122-020000-run.log"
+    log.write_text("02:00:01 coleta\n02:03:00 nota do LLM\n", encoding="utf-8")
+    with sessions.begin() as s:
+        s.add(
+            Run(
+                stats={"collected": 900, "llm_scored": 4},
+                errors=[],
+                stage="nota",
+                current_item="[5/30] Backend Python — Stone",
+                budget_ends_at=utcnow() + timedelta(minutes=90),
+                log_path=str(log),
+            )
+        )
+    stops, starts = [], []
+    client = TestClient(
+        create_app(
+            sessions,
+            logs_dir=logs,
+            request_stop=lambda: stops.append(1),
+            start_run=lambda: starts.append(1) or "Rodada iniciada",
+        )
+    )
+
+    html = client.get("/ao-vivo/estado").text
+    assert 'hx-trigger="every 2s"' in html
+    assert '<li class="active">Nota do LLM</li>' in html
+    assert '<li class="done">Coleta</li>' in html
+    assert "[5/30] Backend Python — Stone" in html
+    assert "<b>900</b>" in html
+    assert "1h29min" in html or "1h30min" in html
+    assert "nota do LLM" in html, "fim do log"
+
+    assert client.post("/ao-vivo/parar").status_code == 403
+    assert "Parada pedida" in client.post("/ao-vivo/parar", headers=HX).text
+    assert stops == [1]
+
+
+def test_live_page_after_finish_stops_polling_and_can_start(sessions, tmp_path):
+    with sessions.begin() as s:
+        s.add(
+            Run(
+                stats={"collected": 10},
+                errors=["gupy: fora do ar"],
+                stage="documentos",
+                status=RunStatus.SUCCESS,
+                finished_at=utcnow(),
+                log_path=str(tmp_path / "fora-de-logs.log"),
+            )
+        )
+    (tmp_path / "fora-de-logs.log").write_text("segredo", encoding="utf-8")
+    client = TestClient(
+        create_app(sessions, logs_dir=tmp_path / "logs", start_run=lambda: "Rodada iniciada")
+    )
+    html = client.get("/ao-vivo").text
+    assert "every 2s" not in html.split('id="live"')[1].split(">")[0]
+    assert "concluída" in html and "gupy: fora do ar" in html
+    assert "segredo" not in html, "log fora da pasta de logs não é lido"
+
+    started = client.post("/ao-vivo/iniciar", headers=HX).text
+    assert "Rodada iniciada" in started and 'hx-trigger="every 2s"' in started

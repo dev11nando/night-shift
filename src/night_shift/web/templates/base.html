@@ -12,6 +12,7 @@
     <a class="brand" href="/">night-shift</a>
     <nav>
       <a href="/" class="{{ 'active' if active == 'hoje' }}">Hoje</a>
+      <a href="/ao-vivo" class="{{ 'active' if active == 'ao-vivo' }}">Ao vivo</a>
       <a href="/fila" class="{{ 'active' if active == 'fila' }}">Fila {% include "_queue_count.html" %}</a>
       <a href="/mercado" class="{{ 'active' if active == 'mercado' }}">Mercado</a>
     </nav>
