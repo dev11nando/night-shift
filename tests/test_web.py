@@ -345,3 +345,24 @@ def test_live_page_after_finish_stops_polling_and_can_start(sessions, tmp_path):
 
     started = client.post("/ao-vivo/iniciar", headers=HX).text
     assert "Rodada iniciada" in started and 'hx-trigger="every 2s"' in started
+
+
+def test_start_keeps_polling_until_the_new_run_appears(sessions):
+    with sessions.begin() as s:
+        s.add(Run(stats={}, errors=[], status=RunStatus.SUCCESS, finished_at=utcnow()))
+    client = TestClient(create_app(sessions, start_run=lambda: "Rodada iniciada"))
+
+    started = client.post("/ao-vivo/iniciar", headers=HX).text
+    assert "esperando=20&amp;desde=1" in started or "esperando=20&desde=1" in started
+
+    # A tarefa ainda não criou o Run novo: continua esperando, com uma tentativa a menos.
+    waiting = client.get("/ao-vivo/estado?esperando=20&desde=1").text
+    assert "esperando=19" in waiting and "Disparando a rodada" in waiting
+
+    with sessions.begin() as s:
+        s.add(Run(stats={"collected": 1}, errors=[]))  # a tarefa começou
+    live = client.get("/ao-vivo/estado?esperando=19&desde=1").text
+    assert "esperando" not in live and 'hx-get="/ao-vivo/estado"' in live
+
+    gave_up = client.get("/ao-vivo/estado?esperando=0&desde=99").text
+    assert "every 2s" in live and "Disparando" not in gave_up

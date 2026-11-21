@@ -23,6 +23,9 @@ HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
 
 # Abas da Fila: filas de pendentes (por lane) e decididas (por status).
+# Atualizações (a cada 2 s) esperando a tarefa disparada criar a execução nova.
+WAIT_POLLS = 20
+
 LANE_VIEWS = {"manual": Lane.MANUAL, "auto": Lane.AUTO}
 STATUS_VIEWS = {
     "aplicadas": (ApplicationStatus.APPLIED_MANUAL, ApplicationStatus.AUTO_APPLIED),
@@ -227,8 +230,18 @@ def create_app(
         return page(request, "ao_vivo.html", repo, active="ao-vivo", **live(request, repo))
 
     @app.get("/ao-vivo/estado", response_class=HTMLResponse)
-    def ao_vivo_estado(request: Request, repo: Repo):
-        return templates.TemplateResponse(request, "_live.html", live(request, repo))
+    def ao_vivo_estado(
+        request: Request,
+        repo: Repo,
+        esperando: Annotated[int, Query(ge=0, le=WAIT_POLLS)] = 0,
+        desde: Annotated[int, Query(ge=0)] = 0,
+    ):
+        ctx = live(request, repo)
+        # Depois do "Rodar agora", a tarefa leva alguns segundos para criar o Run novo:
+        # enquanto o último Run for o de antes (id <= desde), continua esperando.
+        if esperando and (ctx["run"] is None or ctx["run"].id <= desde):
+            ctx.update(waiting=esperando - 1, waiting_since=desde)
+        return templates.TemplateResponse(request, "_live.html", ctx)
 
     @app.post("/ao-vivo/parar", response_class=HTMLResponse)
     def ao_vivo_parar(request: Request, repo: Repo):
@@ -248,7 +261,8 @@ def create_app(
             raise HTTPException(404)
         msg = start_run()
         ctx = live(request, repo, msg)
-        ctx["running"] = True  # a tarefa leva alguns segundos para registrar a execução
+        if ctx["run"] is None or not ctx["running"]:
+            ctx.update(waiting=WAIT_POLLS, waiting_since=ctx["run"].id if ctx["run"] else 0)
         return templates.TemplateResponse(request, "_live.html", ctx)
 
     @app.get("/healthz")
