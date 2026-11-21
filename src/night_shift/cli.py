@@ -258,6 +258,38 @@ def jobs(
             typer.echo(f"     {j.url}\n")
 
 
+@app.command()
+def serve(
+    port: int = typer.Option(8765, "--port", "-p"),
+    open_browser: bool = typer.Option(False, "--open", help="Abre o painel no navegador."),
+) -> None:
+    """Sobe o painel em http://127.0.0.1:PORT (só acessível desta máquina)."""
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    from night_shift.web.app import create_app
+
+    paths = _paths()
+    enter_managed_process(paths, "serve")
+    pipeline = _pipeline(paths)
+    url = f"http://127.0.0.1:{port}"
+    typer.echo(f"painel em {url}  (Ctrl+C para parar)")
+    if open_browser:
+        threading.Timer(1.0, webbrowser.open, args=[url]).start()
+    uvicorn.run(create_app(pipeline.sessions), host="127.0.0.1", port=port, log_level="warning")
+
+
+@db_app.command("enrich")
+def db_enrich() -> None:
+    """Preenche nível, contrato e salário de vagas antigas a partir do texto."""
+    pipeline = _pipeline(_paths())
+    with pipeline.sessions.begin() as s:
+        n = JobRepository(s).enrich_existing()
+    typer.echo(f"{n} vaga(s) atualizada(s)")
+
+
 @companies_app.command("probe")
 def companies_probe(slugs: list[str]) -> None:
     """Descobre em qual ATS (Greenhouse/Lever/Ashby) cada slug tem job board."""

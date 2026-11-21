@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Mercado · night-shift{% endblock %}
+{% block content %}
+<h1>Mercado</h1>
+<p class="muted">Faixas salariais publicadas nas vagas coletadas (mensal, R$). Poucas empresas publicam
+salário, então trate como amostra, não como verdade.</p>
+
+{% if not buckets %}
+  <section class="empty"><p>Nenhuma vaga com salário publicado ainda.</p></section>
+{% else %}
+<section>
+  <h2>Mediana por nível e contrato</h2>
+  <table>
+    <thead><tr><th>Nível</th><th>Contrato</th><th class="num">Vagas</th><th class="num">Mediana mín.</th><th class="num">Mediana máx.</th></tr></thead>
+    <tbody>
+    {% for b in buckets %}
+      <tr>
+        <td>{{ b.level or 'não informado' }}</td>
+        <td>{{ (b.contract | upper) if b.contract else 'não informado' }}</td>
+        <td class="num">{{ b.count }}</td>
+        <td class="num">{{ b.median_min | brl }}</td>
+        <td class="num">{{ b.median_max | brl }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Vagas com salário ({{ jobs | length }})</h2>
+  <table>
+    <thead><tr><th>Vaga</th><th>Empresa</th><th>Nível</th><th>Contrato</th><th class="num">Faixa</th></tr></thead>
+    <tbody>
+    {% for j in jobs %}
+      <tr>
+        <td><a href="{{ j.url }}" target="_blank" rel="noopener">{{ j.title }}</a></td>
+        <td>{{ j.company_name }}</td>
+        <td>{{ j.level or '—' }}</td>
+        <td>{{ (j.contract | upper) if j.contract else '—' }}</td>
+        <td class="num">{{ j.salary_min | brl }}{% if j.salary_max %} a {{ j.salary_max | brl }}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

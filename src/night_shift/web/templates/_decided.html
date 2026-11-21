@@ -1,0 +1,10 @@
+{% set j = sc.job %}
+{% set applied = j.application.status == 'applied_manual' %}
+<article class="card decided" id="job-{{ j.id }}">
+  <p>
+    <span class="{{ 'ok' if applied else 'muted' }}">{{ 'Aplicada' if applied else 'Descartada' }}:</span>
+    {{ j.title }} · {{ j.company_name }}
+  </p>
+  <button class="btn ghost" hx-post="/jobs/{{ j.id }}/undo" hx-target="#job-{{ j.id }}" hx-swap="outerHTML">Desfazer</button>
+</article>
+{% include "_queue_count.html" %}

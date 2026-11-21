@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}night-shift{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">night-shift</a>
+    <nav>
+      <a href="/" class="{{ 'active' if active == 'hoje' }}">Hoje</a>
+      <a href="/fila" class="{{ 'active' if active == 'fila' }}">Fila {% include "_queue_count.html" %}</a>
+      <a href="/mercado" class="{{ 'active' if active == 'mercado' }}">Mercado</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>v{{ version }} · dados locais em data/night-shift.db</footer>
+</body>
+</html>

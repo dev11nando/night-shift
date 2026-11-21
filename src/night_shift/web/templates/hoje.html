@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Hoje · night-shift{% endblock %}
+{% block content %}
+<h1>Hoje</h1>
+
+{% if not last %}
+  <section class="empty">
+    <p>Nenhuma execução ainda.</p>
+    <p>Rode <code>uv run night-shift run</code> para coletar e avaliar as vagas.</p>
+  </section>
+{% else %}
+  {% set st = last.stats %}
+  <section class="run status-{{ last.status }}">
+    <div class="run-head">
+      <h2>Última execução · #{{ last.id }}</h2>
+      <span class="status">{{ {'success': 'concluída', 'failed': 'falhou', 'stopped': 'parada', 'running': 'rodando'}[last.status] }}</span>
+    </div>
+    <p class="muted">{{ last.started_at | local_dt }} · {{ duration(last.started_at, last.finished_at) }}</p>
+
+    <ol class="funnel">
+      <li><b>{{ st.get('collected', 0) }}</b><span>coletadas</span></li>
+      <li><b>{{ st.get('new', 0) }}</b><span>novas</span></li>
+      <li><b>{{ st.get('passed_filter', 0) }}</b><span>passaram no filtro</span></li>
+      <li><b>{{ st.get('embedded', 0) }}</b><span>comparadas com o CV</span></li>
+      <li><b>{{ st.get('llm_scored', 0) }}</b><span>avaliadas pelo LLM</span></li>
+    </ol>
+
+    {% if last.errors %}
+      <details class="errors" open>
+        <summary>{{ last.errors | length }} erro(s)</summary>
+        <ul>{% for e in last.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+      </details>
+    {% endif %}
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h2>Melhores desta execução</h2>
+      <a href="/fila">Ver fila completa ({{ counts.queued }})</a>
+    </div>
+    {% for sc in best %}
+      {% include "_card.html" %}
+    {% else %}
+      <p class="muted">Nenhuma vaga recebeu nota nesta execução.{% if counts.queued %} A fila ainda tem {{ counts.queued }} de antes.{% endif %}</p>
+    {% endfor %}
+  </section>
+
+  {% if older %}
+  <section>
+    <h2>Execuções anteriores</h2>
+    <table>
+      <thead><tr><th>#</th><th>Início</th><th>Duração</th><th>Status</th><th>Novas</th><th>Avaliadas</th><th>Erros</th></tr></thead>
+      <tbody>
+      {% for r in older %}
+        <tr>
+          <td>{{ r.id }}</td><td>{{ r.started_at | local_dt }}</td>
+          <td>{{ duration(r.started_at, r.finished_at) }}</td><td>{{ r.status }}</td>
+          <td>{{ r.stats.get('new', 0) }}</td><td>{{ r.stats.get('llm_scored', 0) }}</td>
+          <td>{{ r.errors | length }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+{% endif %}
+{% endblock %}
