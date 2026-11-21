@@ -142,6 +142,14 @@ experiences:
 
 O LLM **só pode devolver IDs de bullets e a ordem deles**, mais um resumo de 2–3 linhas. Um validador rejeita qualquer saída com ID inexistente. O texto dos bullets é sempre o original.
 
+Implementado na Fase 3 (`domain/cv.py`). O validador também rejeita: empresa ausente ou a
+mais, bullet repetido, habilidade fora do mestre e resumo que cita tecnologia que o mestre
+não cita. Rejeição → nova tentativa com o motivo → CV mestre sem ajuste. A carta (≤ 170
+palavras, no idioma da vaga) é rejeitada se tiver campo para preencher, passar de 220
+palavras, não tiver assinatura ou citar tecnologia que não está nem no CV nem na vaga. Só
+vagas com nota ≥ `llm.documents_min_score` (70) recebem documentos, até
+`llm.claude_daily_letters` (10) por execução.
+
 ---
 
 ## 7. Modelo de dados (SQLite)
