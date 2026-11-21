@@ -87,7 +87,7 @@ def seeded(sessions):
 
 def test_empty_pages_render(client):
     assert "Nenhuma execução ainda" in client.get("/").text
-    assert "Nada para revisar" in client.get("/fila").text
+    assert "Nada na fila manual" in client.get("/fila").text
     assert "Nenhuma vaga com salário" in client.get("/mercado").text
 
 
@@ -99,22 +99,34 @@ def test_hoje_shows_last_run_funnel_errors_and_best(client, seeded):
     assert html.index("Backend Python Pleno") < html.index("Desenvolvedor Python")
 
 
-def test_queue_is_sorted_and_filtered(client, seeded):
+def test_manual_queue_is_default_sorted_and_explains_why(client, seeded):
     html = client.get("/fila").text
-    titles = [
-        "Backend Python Pleno",
-        "Python Gupy",
-        "Desenvolvedor Python",
-        "Engenheiro de Software",
-    ]
+    titles = ["Python Gupy", "Desenvolvedor Python", "Engenheiro de Software"]
     positions = [html.index(t) for t in titles]
     assert positions == sorted(positions)
+    assert "Backend Python Pleno" not in html, "nota 91 sem alerta no Greenhouse é automática"
     assert "Ainda sem nota" not in html, "vaga sem nota do LLM não entra na fila"
     assert "exige inglês fluente" in html
+    assert "gupy: candidatura só manual" in html
+    assert "nota abaixo de 85" in html
+    assert "Manual (3)" in html and "Automática (1)" in html
 
-    filtered = client.get("/fila?min=60").text
-    assert "Backend Python Pleno" in filtered
+    filtered = client.get("/fila?view=manual&min=60").text
+    assert "Python Gupy" in filtered
     assert "Engenheiro de Software" not in filtered
+
+
+def test_auto_queue(client, seeded):
+    html = client.get("/fila?view=auto").text
+    assert "Backend Python Pleno" in html
+    assert "Fila automática" in html
+    assert "Python Gupy" not in html
+
+
+def test_threshold_moves_jobs_between_queues(sessions, seeded):
+    html = TestClient(create_app(sessions, auto_threshold=95)).get("/fila?view=auto").text
+    assert "Backend Python Pleno" not in html
+    assert "Nada na fila automática" in html
 
 
 def test_done_moves_job_out_of_queue_and_updates_count(client, sessions, seeded):
@@ -123,7 +135,7 @@ def test_done_moves_job_out_of_queue_and_updates_count(client, sessions, seeded)
     assert resp.status_code == 200
     assert "Aplicada" in resp.text and "Desfazer" in resp.text
     assert 'id="queue-count"' in resp.text and ">3<" in resp.text, "contador da fila via OOB"
-    assert "Backend Python Pleno" not in client.get("/fila").text
+    assert "Backend Python Pleno" not in client.get("/fila?view=auto").text
     assert "Backend Python Pleno" in client.get("/fila?view=aplicadas").text
 
     with sessions() as s:

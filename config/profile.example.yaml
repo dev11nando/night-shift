@@ -26,11 +26,19 @@ automation:
   daily_auto_apply_limit: 10
 
 llm:
+  # claude: Claude Code CLI com o login da sua assinatura (sem API key); ordena as vagas por
+  #         palavras-chave do CV. Instale com `winget install Anthropic.ClaudeCode` e rode
+  #         `claude` uma vez para fazer login.
+  # ollama: modelos locais (precisa do Ollama rodando + ollama pull dos dois modelos abaixo).
+  provider: claude
+  claude_model: haiku                 # o mais barato; usa os limites do seu plano
+  time_budget_minutes: 120            # a etapa de nota para depois disso; o resto fica p/ amanhã
+  rank_top_n: 30                      # vagas por noite que vão para o LLM
+  # --- só para provider: ollama
   local_model: qwen3:8b               # ~5 GB de VRAM em Q4
   embed_model: bge-m3                 # multilíngue (PT + EN)
   ollama_url: http://localhost:11434
   think: false                        # raciocínio estendido do qwen3: lento e desnecessário aqui
-  rank_top_n: 30                      # vagas por noite que vão para o LLM
   claude_daily_letters: 10
   claude_daily_outreach: 5
 

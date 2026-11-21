@@ -12,9 +12,10 @@ MAX_DESCRIPTION_CHARS = 6000
 
 class JobFit(BaseModel):
     score: int = Field(ge=0, le=100, description="Encaixe geral de 0 a 100.")
-    rationale: str = Field(description="1 a 2 frases explicando a nota, em português.")
+    rationale: str = Field(description="1 a 2 frases curtas explicando a nota, em português.")
     red_flags: list[str] = Field(
-        default=[], description="Problemas objetivos, ex.: 'exige inglês fluente'."
+        default=[],
+        description="Só incompatibilidades concretas exigidas pela vaga; nunca 'não informado'.",
     )
 
 
@@ -78,4 +79,14 @@ Descrição:
 - Logística (até 20): modelo de trabalho, local, idioma e salário compatíveis com as preferências.
   Compare o idioma exigido pela vaga com os idiomas do candidato.
 
-Em red_flags liste só problemas objetivos encontrados no texto da vaga."""
+## rationale
+Uma ou duas frases curtas: o principal motivo da nota.
+
+## red_flags
+Só incompatibilidades CONCRETAS que a vaga EXIGE (não diferenciais) e que impedem ou
+atrapalham muito a candidatura, cada uma em até 12 palavras. Exemplos válidos:
+"exige inglês fluente", "exige 5+ anos de experiência", "stack obrigatória é Java",
+"presencial em Curitiba", "vaga sênior/specialist".
+NÃO são red flags: informação ausente (salário, modelo, nível ou contrato não informados),
+itens marcados como diferencial/desejável, formação (tecnólogo conta como graduação) e
+ferramentas que o candidato aprende rápido. Se não houver nenhuma, devolva lista vazia."""

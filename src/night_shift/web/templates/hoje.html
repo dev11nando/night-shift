@@ -36,7 +36,7 @@
   <section>
     <div class="section-head">
       <h2>Melhores desta execução</h2>
-      <a href="/fila">Ver fila completa ({{ counts.queued }})</a>
+      <span><a href="/fila?view=manual">Manual ({{ counts.manual }})</a> · <a href="/fila?view=auto">Automática ({{ counts.auto }})</a></span>
     </div>
     {% for sc in best %}
       {% include "_card.html" %}
