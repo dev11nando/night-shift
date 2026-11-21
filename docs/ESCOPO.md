@@ -242,7 +242,7 @@ No Windows, um processo filho órfão (Chromium do Playwright, Ollama segurando 
 
 **Como acionar:**
 - `night-shift off`, ou
-- atalho na área de trabalho (`NightShift-OFF.lnk` → script `.ps1`), ou
+- atalho "night-shift OFF" na área de trabalho (criado por `night-shift shortcuts`), ou
 - botão **Desligar tudo** no painel (ele se desliga por último).
 
 **O que ele faz, em ordem:**
@@ -255,6 +255,23 @@ No Windows, um processo filho órfão (Chromium do Playwright, Ollama segurando 
 6. Imprime um relatório: o que foi encerrado, a VRAM liberada e as tarefas desativadas. Se sobrar algum processo, ele é listado com o PID.
 
 **Pronto quando:** depois do `off`, o Gerenciador de Tarefas não mostra nada do projeto, a VRAM volta ao nível de repouso e nada roda na noite seguinte até um `night-shift on`.
+
+**Implementado na Fase 4** (`runtime/turn_off.py`). Diferenças do plano: o kill usa
+`psutil` na árvore de cada PID registrado (em vez de `taskkill`), e o Ollama só é tocado
+quando `llm.provider: ollama` ou `turn_off.stop_ollama: true`. Verificado de verdade com a
+tarefa agendada no meio da etapa de nota: o pipeline parou sozinho em 7 s, entre duas vagas,
+e a execução ficou registrada como `stopped`.
+
+### 11.2 Execução noturna
+
+- `night-shift schedule install --at 02:00` cria a tarefa `\NightShift\Nightly` a partir de
+  um XML: pasta de trabalho do projeto, acorda o PC da suspensão, roda na bateria, recupera
+  execução perdida (`StartWhenAvailable`), no máximo 3 h, uma instância por vez, só com o
+  usuário logado (sem senha, sem admin).
+- Cada comando do pipeline grava `logs/<data>-<comando>.log` (os 60 mais recentes ficam).
+- Só um comando do pipeline roda por vez; o segundo é recusado e a recusa vai para o log.
+- Execução que ficou `running` (PC desligado no meio) vira `failed` na próxima, que continua
+  de onde parou porque todas as etapas são idempotentes.
 
 ---
 
