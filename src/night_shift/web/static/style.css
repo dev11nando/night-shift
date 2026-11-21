@@ -58,7 +58,7 @@ h2 { font-size: 1.1rem; margin: 0 0 .75rem; }
   padding: .75rem 1.5rem; background: var(--surface); border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 1;
 }
-.brand { font-weight: 700; color: var(--text); text-decoration: none; letter-spacing: -.01em; }
+.brand { white-space: nowrap; font-weight: 700; color: var(--text); text-decoration: none; letter-spacing: -.01em; }
 nav { display: flex; gap: 1.25rem; }
 nav a { color: var(--muted); text-decoration: none; padding: .25rem 0; border-bottom: 2px solid transparent; }
 nav a.active { color: var(--text); border-color: var(--accent); }
@@ -129,6 +129,8 @@ details summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
 .btn:hover { border-color: var(--text); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
 .btn.ghost { background: transparent; color: var(--muted); }
+.top-actions { margin-left: auto; display: flex; gap: .5rem; }
+.btn.small { font-size: .82rem; padding: .3rem .65rem; }
 .btn.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
 .btn.danger:hover { background: var(--danger); color: var(--surface); }
 .system { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .9rem; }
@@ -185,7 +187,11 @@ tr:last-child td { border-bottom: 0; }
 
 @media (max-width: 680px) {
   .live-grid { grid-template-columns: 1fr; }
-  .topbar { gap: 1rem; padding: .75rem 1rem; }
+  .topbar { flex-wrap: wrap; gap: .5rem 1rem; padding: .6rem 1rem; }
+  .brand { white-space: nowrap; }
+  .top-actions { margin-left: auto; }
+  .topbar nav { order: 3; width: 100%; overflow-x: auto; gap: 1rem; }
+  .topbar nav a { white-space: nowrap; }
   .card { grid-template-columns: 44px 1fr; }
   .score { width: 44px; height: 44px; font-size: 1rem; }
   .actions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }

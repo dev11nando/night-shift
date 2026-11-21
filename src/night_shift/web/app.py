@@ -4,9 +4,10 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import NoResultFound
@@ -100,6 +101,8 @@ def create_app(
     def page(request: Request, name: str, repo: ReviewRepository, **ctx) -> HTMLResponse:
         ctx.setdefault("counts", repo.counts())
         ctx.update(card_ctx(repo))
+        ctx.setdefault("can_start", start_run is not None)
+        ctx.setdefault("can_turn_off", on_turn_off is not None)
         return templates.TemplateResponse(request, name, ctx)
 
     @app.get("/", response_class=HTMLResponse)
@@ -226,8 +229,24 @@ def create_app(
         return ctx
 
     @app.get("/ao-vivo", response_class=HTMLResponse)
-    def ao_vivo(request: Request, repo: Repo):
-        return page(request, "ao_vivo.html", repo, active="ao-vivo", **live(request, repo))
+    def ao_vivo(request: Request, repo: Repo, msg: str | None = None):
+        ctx = live(request, repo, msg)
+        if msg and not ctx["running"]:
+            # Acabou de vir do botão "Buscar vagas": espera a execução nova aparecer.
+            ctx.update(waiting=WAIT_POLLS, waiting_since=ctx["run"].id if ctx["run"] else 0)
+        return page(request, "ao_vivo.html", repo, active="ao-vivo", **ctx)
+
+    @app.post("/buscar")
+    def buscar(request: Request):
+        """Botão "Buscar vagas" do topo: dispara a busca e leva para a página Ao vivo."""
+        if request.headers.get("HX-Request") != "true":
+            raise HTTPException(403, "use o painel")
+        if start_run is None:
+            raise HTTPException(404)
+        msg = start_run()
+        return Response(
+            status_code=204, headers={"HX-Redirect": f"/ao-vivo?{urlencode({'msg': msg})}"}
+        )
 
     @app.get("/ao-vivo/estado", response_class=HTMLResponse)
     def ao_vivo_estado(

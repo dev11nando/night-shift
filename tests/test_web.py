@@ -366,3 +366,30 @@ def test_start_keeps_polling_until_the_new_run_appears(sessions):
 
     gave_up = client.get("/ao-vivo/estado?esperando=0&desde=99").text
     assert "every 2s" in live and "Disparando" not in gave_up
+
+
+def test_header_buttons_and_buscar_redirects_to_live(sessions):
+    started = []
+    client = TestClient(
+        create_app(
+            sessions,
+            start_run=lambda: started.append(1) or "Busca iniciada",
+            on_turn_off=lambda: ["ok"],
+        )
+    )
+    for path in ("/", "/fila", "/mercado", "/ao-vivo"):
+        html = client.get(path).text
+        assert 'hx-post="/buscar"' in html and ">Desligar</button>" in html, path
+
+    assert client.post("/buscar").status_code == 403
+    resp = client.post("/buscar", headers=HX)
+    assert resp.status_code == 204 and started == [1]
+    assert resp.headers["HX-Redirect"].startswith("/ao-vivo?msg=Busca")
+
+    page = client.get(resp.headers["HX-Redirect"]).text
+    assert "Busca iniciada" in page and "esperando=20" in page
+
+
+def test_header_buttons_hidden_without_handlers(client):
+    html = client.get("/").text
+    assert "/buscar" not in html and ">Desligar</button>" not in html

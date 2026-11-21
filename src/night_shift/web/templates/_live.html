@@ -7,7 +7,7 @@
       <p>Nenhuma execução ainda.</p>
       {% if can_start %}
       <button class="btn primary" hx-post="/ao-vivo/iniciar" hx-target="#live" hx-swap="outerHTML"
-              hx-confirm="Iniciar uma rodada agora? Usa o limite do seu plano Claude.">Rodar agora</button>
+              hx-confirm="Buscar vagas agora? Usa o limite do seu plano Claude.">Buscar vagas</button>
       {% endif %}
     </section>
   {% else %}
@@ -26,7 +26,7 @@
           <span class="status">{{ {'success': 'concluída', 'failed': 'falhou', 'stopped': 'parada'}.get(run.status, run.status) }}</span>
           {% if can_start %}
           <button class="btn primary" hx-post="/ao-vivo/iniciar" hx-target="#live" hx-swap="outerHTML"
-                  hx-confirm="Iniciar uma rodada agora? Usa o limite do seu plano Claude.">Rodar agora</button>
+                  hx-confirm="Buscar vagas agora? Usa o limite do seu plano Claude.">Buscar vagas</button>
           {% endif %}
         {% endif %}
       </div>

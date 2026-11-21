@@ -12,7 +12,7 @@ from night_shift import __version__
 from night_shift.adapters.llm.claude_cli import ClaudeCLI, find_executable
 from night_shift.adapters.llm.ollama import OllamaEmbedder, OllamaLLM
 from night_shift.adapters.render.cv_pdf import render_cv_pdf
-from night_shift.adapters.scheduler.windows_task import WindowsTaskScheduler
+from night_shift.adapters.scheduler.windows_task import ON_DEMAND_TASK, WindowsTaskScheduler
 from night_shift.adapters.sources import build_sources
 from night_shift.adapters.sources.ats import ATS_SOURCES
 from night_shift.adapters.sources.http import PoliteClient, make_client
@@ -387,20 +387,23 @@ def jobs(
             typer.echo(f"     {j.url}\n")
 
 
-def _start_scheduled_run(scheduler: WindowsTaskScheduler, paths: ProjectPaths) -> str:
-    """Botão 'Rodar agora' do painel: dispara a própria tarefa agendada, que roda fora do
-    processo do painel (fechar o painel não mata a execução)."""
+def _start_on_demand(paths: ProjectPaths) -> str:
+    """Botão 'Buscar vagas' do painel. Dispara a tarefa ``\\NightShift\\OnDemand``, que não
+    tem horário (nunca roda sozinha) e é independente da noturna: funciona mesmo com a busca
+    automática desligada. Roda fora do processo do painel, então fechar o painel não mata a
+    busca; o `off` mata, porque a busca se registra como qualquer execução."""
     other = running_pipeline(paths)
     if other is not None:
         return f"Já tem um `{other.name}` rodando (PID {other.pid})."
-    status = scheduler.status()
+    launcher = WindowsTaskScheduler(ON_DEMAND_TASK)
+    status = launcher.status()
     if not status.installed:
-        return "Não há tarefa agendada: rode `night-shift schedule install`."
-    if not status.enabled:
-        return "A tarefa está desligada (depois de um `off`): rode `night-shift on`."
+        launcher.install(_venv_exe(), "run", paths.root, at=None)
+    elif not status.enabled:
+        launcher.enable()
     StopFlag(paths.run_dir).clear()
-    scheduler.run_now()
-    return "Rodada iniciada pela tarefa agendada; os números aparecem em alguns segundos."
+    launcher.run_now()
+    return "Busca iniciada; os números aparecem em alguns segundos."
 
 
 @app.command()
@@ -447,7 +450,7 @@ def serve(
         on_turn_off=turn_everything_off,
         logs_dir=paths.logs_dir,
         request_stop=StopFlag(paths.run_dir).request,
-        start_run=(lambda: _start_scheduled_run(scheduler, paths)) if scheduler else None,
+        start_run=(lambda: _start_on_demand(paths)) if scheduler else None,
     )
     uvicorn.run(web_app, host="127.0.0.1", port=port, log_level="warning")
 
@@ -609,10 +612,29 @@ def schedule_status() -> None:
 
 @schedule_app.command("remove")
 def schedule_remove() -> None:
-    """Apaga a tarefa diária do Agendador."""
+    """Apaga a tarefa diária (e a sob demanda do botão 'Buscar vagas')."""
     scheduler = _scheduler()
     removed = scheduler.remove() if scheduler else False
+    if scheduler is not None:
+        WindowsTaskScheduler(ON_DEMAND_TASK).remove()
     typer.echo("tarefa removida" if removed else "não havia tarefa agendada")
+
+
+@schedule_app.command("disable")
+def schedule_disable() -> None:
+    """Desliga só a busca automática diária (o painel e o botão 'Buscar vagas' seguem
+    funcionando). Religue com `schedule enable`."""
+    scheduler = _scheduler()
+    ok = scheduler.disable() if scheduler else False
+    typer.echo(f"busca automática: {scheduler.status().describe()}" if ok else "não há tarefa")
+
+
+@schedule_app.command("enable")
+def schedule_enable() -> None:
+    """Religa a busca automática diária."""
+    scheduler = _scheduler()
+    ok = scheduler.enable() if scheduler else False
+    typer.echo(f"busca automática: {scheduler.status().describe()}" if ok else "não há tarefa")
 
 
 @schedule_app.command("run-now")

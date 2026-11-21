@@ -16,6 +16,16 @@
       <a href="/fila" class="{{ 'active' if active == 'fila' }}">Fila {% include "_queue_count.html" %}</a>
       <a href="/mercado" class="{{ 'active' if active == 'mercado' }}">Mercado</a>
     </nav>
+    <div class="top-actions">
+      {% if can_start %}
+      <button class="btn primary small" hx-post="/buscar"
+              hx-confirm="Buscar vagas agora? Coleta, dá nota e gera CV e carta. Usa o limite do seu plano Claude.">Buscar vagas</button>
+      {% endif %}
+      {% if can_turn_off %}
+      <button class="btn danger small" hx-post="/system/off" hx-target="main" hx-swap="innerHTML"
+              hx-confirm="Desligar o night-shift? Encerra busca em andamento, painel e a tarefa agendada.">Desligar</button>
+      {% endif %}
+    </div>
   </header>
   <main>
     {% block content %}{% endblock %}

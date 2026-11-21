@@ -5,10 +5,6 @@
   <h1>Hoje</h1>
   <div class="system" id="system">
     {% if schedule %}<span class="muted">Agendamento: {{ schedule }}</span>{% endif %}
-    {% if can_turn_off %}
-      <button class="btn danger" hx-post="/system/off" hx-target="#system" hx-swap="outerHTML"
-              hx-confirm="Desligar o night-shift? Para pipeline, painel e a tarefa agendada.">Desligar tudo</button>
-    {% endif %}
   </div>
 </div>
 

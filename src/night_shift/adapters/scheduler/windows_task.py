@@ -16,6 +16,8 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 TASK_NAME = r"\NightShift\Nightly"
+# Sem horário: só roda quando alguém dispara (botão "Buscar vagas" do painel).
+ON_DEMAND_TASK = r"\NightShift\OnDemand"
 
 Runner = Callable[[list[str]], subprocess.CompletedProcess]
 
@@ -43,21 +45,26 @@ class ScheduleStatus:
 
 
 def build_task_xml(
-    executable: Path, arguments: str, workdir: Path, at: time, max_hours: int = 3
+    executable: Path, arguments: str, workdir: Path, at: time | None, max_hours: int = 3
 ) -> str:
-    start = f"{date.today().isoformat()}T{at.strftime('%H:%M')}:00"
-    return f"""<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo>
-    <Description>night-shift: coleta, avalia e prepara candidaturas durante a noite.</Description>
-  </RegistrationInfo>
-  <Triggers>
+    """``at=None`` cria a tarefa sem gatilho: ela só roda quando disparada com ``/Run``."""
+    if at is None:
+        triggers = "  <Triggers />"
+    else:
+        start = f"{date.today().isoformat()}T{at.strftime('%H:%M')}:00"
+        triggers = f"""  <Triggers>
     <CalendarTrigger>
       <StartBoundary>{start}</StartBoundary>
       <Enabled>true</Enabled>
       <ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay>
     </CalendarTrigger>
-  </Triggers>
+  </Triggers>"""
+    return f"""<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>night-shift: coleta, avalia e prepara candidaturas durante a noite.</Description>
+  </RegistrationInfo>
+{triggers}
   <Principals>
     <Principal id="Author">
       <LogonType>InteractiveToken</LogonType>
@@ -97,7 +104,12 @@ class WindowsTaskScheduler:
         return proc
 
     def install(
-        self, executable: Path, arguments: str, workdir: Path, at: time, max_hours: int = 3
+        self,
+        executable: Path,
+        arguments: str,
+        workdir: Path,
+        at: time | None,
+        max_hours: int = 3,
     ) -> None:
         xml = build_task_xml(executable, arguments, workdir, at, max_hours)
         with tempfile.TemporaryDirectory() as tmp:
