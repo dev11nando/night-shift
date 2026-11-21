@@ -33,6 +33,7 @@ from night_shift.config import (
     load_cv,
     load_profile,
 )
+from night_shift.domain.cv import default_cv, translation_problems
 from night_shift.domain.enums import RunStatus
 from night_shift.domain.filters import HardFilter
 from night_shift.paths import ProjectPaths
@@ -55,6 +56,8 @@ companies_app = typer.Typer(help="Empresas-alvo.", no_args_is_help=True)
 app.add_typer(companies_app, name="companies")
 schedule_app = typer.Typer(help="Tarefa diária no Agendador do Windows.", no_args_is_help=True)
 app.add_typer(schedule_app, name="schedule")
+cv_app = typer.Typer(help="CV mestre: PDFs completos e checagem da tradução.", no_args_is_help=True)
+app.add_typer(cv_app, name="cv")
 
 
 @app.callback()
@@ -217,6 +220,7 @@ def _run_steps(name: str, steps_factory) -> None:
     pipeline = _pipeline(paths)
     with open_run_log(paths.logs_dir, name) as logfile:
         pipeline.log = tee(typer.echo, logfile)
+        pipeline.log_path = logfile.name
         pipeline.stop.clear()
         run = pipeline.run(steps_factory(paths, profile, pipeline))
         pipeline.log(f"\nrun #{run.id}: {run.status} {run.stats}")
@@ -283,8 +287,8 @@ def _docs_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline, limit
         llm = ClaudeCLI(llm_cfg.documents_model, executable=llm_cfg.claude_executable)
     minutes = llm_cfg.time_budget_minutes
 
-    def render(tailored, out):
-        return render_cv_pdf(tailored, profile.name, profile.email, out)
+    def render(tailored, out, lang="pt"):
+        return render_cv_pdf(tailored, profile.name, profile.email, out, lang)
 
     return [
         lambda: pipeline.documents(
@@ -296,6 +300,7 @@ def _docs_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline, limit
             llm_cfg.documents_min_score,
             limit or llm_cfg.claude_daily_letters,
             budget_seconds=minutes * 60 if minutes else None,
+            cv_en=load_cv(paths.cv_en_file) if paths.cv_en_file.exists() else None,
         )
     ]
 
@@ -382,6 +387,22 @@ def jobs(
             typer.echo(f"     {j.url}\n")
 
 
+def _start_scheduled_run(scheduler: WindowsTaskScheduler, paths: ProjectPaths) -> str:
+    """Botão 'Rodar agora' do painel: dispara a própria tarefa agendada, que roda fora do
+    processo do painel (fechar o painel não mata a execução)."""
+    other = running_pipeline(paths)
+    if other is not None:
+        return f"Já tem um `{other.name}` rodando (PID {other.pid})."
+    status = scheduler.status()
+    if not status.installed:
+        return "Não há tarefa agendada: rode `night-shift schedule install`."
+    if not status.enabled:
+        return "A tarefa está desligada (depois de um `off`): rode `night-shift on`."
+    StopFlag(paths.run_dir).clear()
+    scheduler.run_now()
+    return "Rodada iniciada pela tarefa agendada; os números aparecem em alguns segundos."
+
+
 @app.command()
 def serve(
     port: int = typer.Option(8765, "--port", "-p"),
@@ -424,6 +445,9 @@ def serve(
         shots_dir=paths.shots_dir,
         schedule_status=(lambda: scheduler.status().describe()) if scheduler else None,
         on_turn_off=turn_everything_off,
+        logs_dir=paths.logs_dir,
+        request_stop=StopFlag(paths.run_dir).request,
+        start_run=(lambda: _start_scheduled_run(scheduler, paths)) if scheduler else None,
     )
     uvicorn.run(web_app, host="127.0.0.1", port=port, log_level="warning")
 
@@ -662,6 +686,42 @@ def shortcuts() -> None:
     created = create_desktop_shortcuts(_venv_exe(), paths.root)
     for path in created:
         typer.echo(f"criado: {path}")
+
+
+@cv_app.command("check")
+def cv_check() -> None:
+    """Valida o CV mestre e confere se a tradução em inglês bate com ele (mesmos IDs)."""
+    paths = _paths()
+    cv = _load_or_exit(load_cv, paths.cv_file)
+    bullets = sum(len(e.bullets) for e in cv.experiences)
+    typer.echo(f"cv_master.yaml: {len(cv.experiences)} experiência(s), {bullets} bullets")
+    if not paths.cv_en_file.exists():
+        typer.echo("cv_master.en.yaml: não existe (vagas em inglês usam o CV em português)")
+        return
+    problems = translation_problems(cv, _load_or_exit(load_cv, paths.cv_en_file))
+    if problems:
+        typer.secho("cv_master.en.yaml NÃO bate com o mestre:", fg="red")
+        for p in problems:
+            typer.echo(f"  - {p}")
+        raise typer.Exit(1)
+    typer.echo("cv_master.en.yaml: ok, mesmos IDs e habilidades")
+
+
+@cv_app.command("pdf")
+def cv_pdf() -> None:
+    """Gera o CV completo (sem ajuste por vaga) em PDF, em português e em inglês, para
+    anexar nas aplicações manuais: output/cv/curriculo.pdf e output/cv/resume-en.pdf."""
+    paths = _paths()
+    profile = _load_or_exit(load_profile, paths.profile_file)
+    versions = [("pt", paths.cv_file, "curriculo.pdf")]
+    if paths.cv_en_file.exists():
+        versions.append(("en", paths.cv_en_file, "resume-en.pdf"))
+    for lang, source, filename in versions:
+        cv = _load_or_exit(load_cv, source)
+        out = render_cv_pdf(
+            default_cv(cv), profile.name, profile.email, paths.cv_output_dir / filename, lang
+        )
+        typer.echo(f"gerado: {out}")
 
 
 @companies_app.command("probe")
