@@ -15,12 +15,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from night_shift import __version__
 from night_shift.adapters.storage.review import ReviewRepository
 from night_shift.domain.enums import ApplicationStatus
+from night_shift.domain.lanes import Lane, manual_reason
 
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
 
+# Abas da Fila: filas de pendentes (por lane) e decididas (por status).
+LANE_VIEWS = {"manual": Lane.MANUAL, "auto": Lane.AUTO}
 STATUS_VIEWS = {
-    "fila": None,
     "aplicadas": ApplicationStatus.APPLIED_MANUAL,
     "descartadas": ApplicationStatus.DISCARDED,
 }
@@ -62,18 +64,27 @@ templates.env.globals.update(duration=duration, version=__version__)
 # ---------------------------------------------------------------------- app
 
 
-def create_app(sessions: sessionmaker[Session]) -> FastAPI:
+def create_app(sessions: sessionmaker[Session], auto_threshold: int = 85) -> FastAPI:
+    """``auto_threshold``: nota mínima para uma vaga de fonte de baixo risco ir para a fila
+    automática (``automation.auto_apply_min_score`` no profile.yaml)."""
     app = FastAPI(title="night-shift", docs_url=None, redoc_url=None)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 
     def repo() -> Iterator[ReviewRepository]:
         with sessions.begin() as s:
-            yield ReviewRepository(s)
+            yield ReviewRepository(s, auto_threshold)
 
     Repo = Annotated[ReviewRepository, Depends(repo)]
 
+    def card_ctx(repo: ReviewRepository) -> dict:
+        def reason_of(sc):
+            return manual_reason(sc.job.source, sc.llm_score, sc.red_flags or [], auto_threshold)
+
+        return {"lane_of": repo.lane, "reason_of": reason_of, "auto_threshold": auto_threshold}
+
     def page(request: Request, name: str, repo: ReviewRepository, **ctx) -> HTMLResponse:
         ctx.setdefault("counts", repo.counts())
+        ctx.update(card_ctx(repo))
         return templates.TemplateResponse(request, name, ctx)
 
     @app.get("/", response_class=HTMLResponse)
@@ -94,11 +105,13 @@ def create_app(sessions: sessionmaker[Session]) -> FastAPI:
     def fila(
         request: Request,
         repo: Repo,
-        view: Annotated[str, Query(pattern="^(fila|aplicadas|descartadas)$")] = "fila",
+        view: Annotated[str, Query(pattern="^(manual|auto|aplicadas|descartadas)$")] = "manual",
         min_score: Annotated[int, Query(alias="min", ge=0, le=100)] = 0,
     ):
-        status = STATUS_VIEWS[view]
-        scores = repo.queue(min_score) if status is None else repo.decided(status)
+        if view in LANE_VIEWS:
+            scores = repo.queue(LANE_VIEWS[view], min_score)
+        else:
+            scores = repo.decided(STATUS_VIEWS[view])
         return page(
             request,
             "fila.html",
@@ -119,7 +132,7 @@ def create_app(sessions: sessionmaker[Session]) -> FastAPI:
         except NoResultFound as e:
             raise HTTPException(404, "vaga não encontrada") from e
         template = "_card.html" if status is None else "_decided.html"
-        ctx = {"sc": score, "counts": repo.counts(), "oob": True}
+        ctx = {"sc": score, "counts": repo.counts(), "oob": True, **card_ctx(repo)}
         return templates.TemplateResponse(request, template, ctx)
 
     @app.post("/jobs/{job_id}/done", response_class=HTMLResponse)

@@ -13,6 +13,13 @@
       {% if j.salary_min or j.salary_max %}<span class="tag money">{{ j.salary_min | brl }}{% if j.salary_max %} a {{ j.salary_max | brl }}{% endif %}</span>{% endif %}
       <span class="muted">{{ j.source }}</span>
     </p>
+    {% if not (app and app.status in ('applied_manual', 'discarded')) %}
+      {% if lane_of(sc) == 'auto' %}
+        <p class="lane auto">Fila automática</p>
+      {% else %}
+        <p class="lane manual">Fila manual · {{ reason_of(sc) }}</p>
+      {% endif %}
+    {% endif %}
     {% if sc.rationale %}<p class="rationale">{{ sc.rationale }}</p>{% endif %}
     {% if sc.red_flags %}
     <ul class="flags">{% for f in sc.red_flags %}<li>{{ f }}</li>{% endfor %}</ul>

@@ -4,14 +4,25 @@
 <div class="section-head">
   <h1>Fila</h1>
   <div class="tabs">
-    <a href="/fila?min={{ min_score }}" class="{{ 'active' if view == 'fila' }}">Para revisar ({{ counts.queued }})</a>
+    <a href="/fila?view=manual&min={{ min_score }}" class="{{ 'active' if view == 'manual' }}">Manual ({{ counts.manual }})</a>
+    <a href="/fila?view=auto&min={{ min_score }}" class="{{ 'active' if view == 'auto' }}">Automática ({{ counts.auto }})</a>
     <a href="/fila?view=aplicadas" class="{{ 'active' if view == 'aplicadas' }}">Aplicadas ({{ counts.applied }})</a>
     <a href="/fila?view=descartadas" class="{{ 'active' if view == 'descartadas' }}">Descartadas ({{ counts.discarded }})</a>
   </div>
 </div>
 
-{% if view == 'fila' %}
+{% if view == 'auto' %}
+<p class="lane-help">Fonte de baixo risco (Greenhouse, Lever, Ashby), nota ≥ {{ auto_threshold }} e nenhum alerta.
+Essas vagas vão ser aplicadas pelo <code>night-shift apply</code> (Fase 5). Até lá, aplique à mão e marque Done,
+ou descarte as que não quiser.</p>
+{% elif view == 'manual' %}
+<p class="lane-help">Precisam de você: plataforma sem aplicação automática (Gupy, LinkedIn), nota abaixo de
+{{ auto_threshold }} ou algum alerta do LLM.</p>
+{% endif %}
+
+{% if view in ('manual', 'auto') %}
 <form class="filter" method="get" action="/fila">
+  <input type="hidden" name="view" value="{{ view }}">
   <label>Nota mínima
     <select name="min" onchange="this.form.submit()">
       {% for v in (0, 50, 60, 70, 80) %}
@@ -26,8 +37,8 @@
   {% include "_card.html" %}
 {% else %}
   <section class="empty">
-    {% if view == 'fila' %}
-      <p>Nada para revisar{% if min_score %} com nota ≥ {{ min_score }}{% endif %}.</p>
+    {% if view in ('manual', 'auto') %}
+      <p>Nada na fila {{ 'automática' if view == 'auto' else 'manual' }}{% if min_score %} com nota ≥ {{ min_score }}{% endif %}.</p>
       <p class="muted">As vagas entram aqui depois que o LLM dá nota (<code>night-shift run</code> ou <code>rank</code>).</p>
     {% else %}
       <p>Nenhuma vaga {{ view }} ainda.</p>

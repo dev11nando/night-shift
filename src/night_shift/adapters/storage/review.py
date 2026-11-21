@@ -9,16 +9,19 @@ from sqlalchemy.orm import Session, joinedload
 
 from night_shift.adapters.storage.models import Application, Job, Run, Score, utcnow
 from night_shift.domain.enums import SOURCE_RISK, ApplicationStatus, Contract, Level
-
-# Decisões que tiram a vaga da fila.
-DECIDED = (ApplicationStatus.APPLIED_MANUAL, ApplicationStatus.DISCARDED)
+from night_shift.domain.lanes import Lane, lane_for
 
 
 @dataclass(frozen=True)
 class QueueCounts:
-    queued: int
+    auto: int
+    manual: int
     applied: int
     discarded: int
+
+    @property
+    def queued(self) -> int:
+        return self.auto + self.manual
 
 
 @dataclass(frozen=True)
@@ -31,8 +34,12 @@ class SalaryBucket:
 
 
 class ReviewRepository:
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, auto_threshold: int = 85) -> None:
         self.s = session
+        self.auto_threshold = auto_threshold
+
+    def lane(self, sc: Score) -> Lane:
+        return lane_for(sc.job.source, sc.llm_score, sc.red_flags or [], self.auto_threshold)
 
     def _scored(self):
         return (
@@ -43,19 +50,24 @@ class ReviewRepository:
             .where(Score.llm_score.is_not(None))
         )
 
-    def queue(self, min_score: int = 0, limit: int = 100) -> Sequence[Score]:
-        """Vagas avaliadas ainda sem decisão, da maior nota para a menor."""
+    def _pending(self, min_score: int = 0) -> Sequence[Score]:
         q = self._scored().where(
             Score.llm_score >= min_score,
             or_(Application.id.is_(None), Application.status == ApplicationStatus.QUEUED),
         )
         return (
-            self.s.scalars(
-                q.order_by(Score.llm_score.desc(), Score.embed_similarity.desc()).limit(limit)
-            )
+            self.s.scalars(q.order_by(Score.llm_score.desc(), Score.embed_similarity.desc()))
             .unique()
             .all()
         )
+
+    def queue(self, lane: Lane | None = None, min_score: int = 0, limit: int = 100) -> list[Score]:
+        """Vagas avaliadas ainda sem decisão, da maior nota para a menor, opcionalmente só
+        de uma fila. A fila é calculada na hora, então o filtro é feito em Python."""
+        pending = self._pending(min_score)
+        if lane is not None:
+            pending = [sc for sc in pending if self.lane(sc) is lane]
+        return list(pending[:limit])
 
     def decided(self, status: ApplicationStatus, limit: int = 100) -> Sequence[Score]:
         q = self._scored().where(Application.status == status)
@@ -67,10 +79,10 @@ class ReviewRepository:
                 select(Application.status, func.count()).group_by(Application.status)
             ).all()
         )
-        scored = self.s.scalar(select(func.count()).where(Score.llm_score.is_not(None))) or 0
-        decided = sum(by_status.get(s, 0) for s in DECIDED)
+        lanes = [self.lane(sc) for sc in self._pending()]
         return QueueCounts(
-            queued=scored - decided,
+            auto=lanes.count(Lane.AUTO),
+            manual=lanes.count(Lane.MANUAL),
             applied=by_status.get(ApplicationStatus.APPLIED_MANUAL, 0),
             discarded=by_status.get(ApplicationStatus.DISCARDED, 0),
         )
