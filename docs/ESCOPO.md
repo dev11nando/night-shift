@@ -74,7 +74,7 @@ Hexagonal (ports & adapters), igual ao que uso no trabalho. O domínio não conh
 
 | Fonte | Coleta | Aplicação | Risco | Ação |
 |---|---|---|---|---|
-| Greenhouse / Lever / Ashby | API pública do job board da empresa | Formulário padrão | **Baixo** | Auto-apply se score ≥ limiar |
+| Greenhouse / Lever / Ashby | API pública do job board da empresa | Formulário padrão, **mas com captcha** | **Baixo** | Aplicação assistida se score ≥ limiar |
 | Programathor | Página/listagem pública | Simples, mas com login | **Médio** | Fila (auto depois, se estável) |
 | Gupy | `__NEXT_DATA__` da busca do portal (a API antiga dá 404); ~12 vagas por termo | Login + perguntas por vaga | **Médio** | Fila, com respostas pré-preenchidas |
 | LinkedIn | E-mails de alerta no Gmail (não toca no site) | — | **Alto** | Só fila |
@@ -218,7 +218,7 @@ night-shift/
 | **2 — Painel** | Telas Hoje, Fila (Done/Descartar) e Mercado | Consigo triar a noite anterior pelo navegador |
 | **3 — CV e carta** | CV mestre, CV ajustado em PDF, carta via Claude | Cada vaga da fila tem CV e carta prontos |
 | **4 — Agendamento + turn-off** | Task Scheduler, logs, `runs`, retomada após falha, `night-shift on/off` (seção 11.1) | Roda sozinho 7 noites seguidas e o `off` limpa tudo |
-| **5 — Auto-apply baixo risco** | Applier Playwright para Greenhouse/Lever/Ashby, dry-run primeiro | Candidaturas automáticas registradas com print de confirmação |
+| **5 — Aplicação assistida** | Playwright abre e preenche Greenhouse/Lever/Ashby; você confere e envia; prévia sem enviar | Candidaturas registradas com print do preenchimento e da confirmação |
 | **6 — Outreach** | companies.yaml, rascunhos no Gmail, controle de recontato | N rascunhos/dia prontos para eu enviar |
 | **7 — Extras** | Alertas do LinkedIn via Gmail, Programathor, funil | — |
 
@@ -230,7 +230,7 @@ O valor chega já na fase 2. Auto-apply fica para depois de eu confiar no score.
 
 - **Privacidade:** CV, profile, companies com contatos, tokens e o `.db` ficam fora do git. Só os `*.example.yaml` são versionados.
 - **Rate limit** educado por fonte, com `User-Agent` genérico e respeito a `robots.txt`.
-- **Auto-apply com limite diário** e modo `--dry-run`. Toda candidatura automática salva print e payload.
+- **Nada é enviado sozinho.** A aplicação é assistida (§13), com limite diário e modo `--preview`. Toda candidatura salva print do preenchimento e da confirmação.
 - **Nunca enviar e-mail:** o token do Gmail tem só o escopo de rascunho (`gmail.compose`).
 - **Recontato:** a mesma empresa não recebe outreach de novo antes de 60 dias.
 - **Kill switch:** `config/profile.yaml → automation.enabled: false` para tudo que submete algo.
@@ -282,3 +282,25 @@ e a execução ficou registrada como `stopped`.
 - [x] Endpoint da Gupy: API antiga morreu; lemos a página de busca (`robots.txt` libera). Sem paginação.
 - [x] Lista inicial de empresas com ATS público: 16 em `config/companies.example.yaml`.
 - [ ] Idioma da carta e do CV para vagas em inglês (ter CV mestre bilíngue?).
+
+---
+
+## 13. Aplicação assistida (Fase 5)
+
+**Decisão de 21/11/2026:** envio 100% automático descartado. Os formulários reais das três
+plataformas (Greenhouse/QuintoAndar e BTG, Lever/Stark Bank, Ashby/Nubank) têm:
+
+- **proteção anti-robô**: reCAPTCHA Enterprise (Greenhouse, Ashby) e hCaptcha (Lever). O
+  sistema não contorna captcha, e envio marcado como robô costuma ser descartado em silêncio;
+- **perguntas obrigatórias que só o candidato responde**: CPF, raça, gênero, orientação,
+  deficiência, pretensão e remuneração anterior, autoavaliação técnica, parentesco.
+
+`night-shift apply` abre cada vaga da fila automática num navegador visível, preenche o que é
+seguro (nome, e-mail, telefone, cidade, LinkedIn, GitHub, empresa atual, respostas fixas de
+`application.answers`), anexa o CV ajustado e cola a carta. Campo sensível nunca é tocado,
+mesmo com resposta configurada. Você completa, resolve o captcha e envia; o sistema reconhece
+a confirmação, tira print e marca como aplicada (`auto_applied`). `--preview` preenche num
+navegador invisível, tira print e fecha sem enviar. `--job ID` aplica uma vaga de qualquer fila.
+
+Medido no formulário real do BTG (prévia): 4 campos preenchidos, CV anexado, 7 sensíveis
+deixados em branco, 11 obrigatórios para o candidato, reCAPTCHA presente.

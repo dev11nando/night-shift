@@ -421,6 +421,7 @@ def serve(
         pipeline.sessions,
         auto_threshold=threshold,
         cv_dir=paths.cv_output_dir,
+        shots_dir=paths.shots_dir,
         schedule_status=(lambda: scheduler.status().describe()) if scheduler else None,
         on_turn_off=turn_everything_off,
     )
@@ -434,6 +435,107 @@ def db_enrich() -> None:
     with pipeline.sessions.begin() as s:
         n = JobRepository(s).enrich_existing()
     typer.echo(f"{n} vaga(s) atualizada(s)")
+
+
+# ----------------------------------------------------------- aplicação assistida
+
+
+@app.command()
+def apply(
+    limit: int = typer.Option(5, "--limit", "-n", help="Máximo de vagas nesta sessão."),
+    job: int | None = typer.Option(
+        None, "--job", help="Uma vaga específica (qualquer fila; só Greenhouse/Lever/Ashby)."
+    ),
+    preview: bool = typer.Option(
+        False,
+        "--preview",
+        help="Só preenche e tira print, com o navegador invisível; você não envia nada.",
+    ),
+) -> None:
+    """Aplicação assistida: abre cada vaga da fila automática já preenchida (dados, CV
+    ajustado e carta). Você confere, completa o que faltar e clica em enviar; o sistema
+    reconhece a confirmação e marca a vaga como aplicada. Nunca envia sozinho."""
+    from night_shift.adapters.applier.assisted import AssistedApplier, apply_url
+    from night_shift.adapters.storage.applications import ApplyRepository
+    from night_shift.application.apply import build_candidate
+
+    paths = _paths()
+    enter_managed_process(paths, "apply")
+    profile = _load_or_exit(load_profile, paths.profile_file)
+    cv = _load_or_exit(load_cv, paths.cv_file)
+    pipeline = _pipeline(paths)
+    stop = StopFlag(paths.run_dir)
+    stop.clear()
+    threshold = profile.automation.auto_apply_min_score
+
+    with pipeline.sessions() as s:
+        repo = ApplyRepository(s, threshold)
+        if job is not None:
+            chosen = repo.one(job)
+            if chosen is None:
+                typer.secho("vaga não encontrada ou não é Greenhouse/Lever/Ashby", fg="red")
+                raise typer.Exit(2)
+            scores = [chosen]
+        else:
+            room = profile.automation.daily_auto_apply_limit - repo.applied_today()
+            if room <= 0 and not preview:
+                typer.echo(
+                    "limite diário de aplicações atingido (automation.daily_auto_apply_limit)"
+                )
+                return
+            scores = repo.ready(min(limit, room) if not preview else limit)
+        plan = []
+        for sc in scores:
+            j, app_row = sc.job, sc.job.application
+            url = apply_url(j.source, j.company.ats_slug if j.company else None, j.external_id)
+            cv_path = app_row.cv_variant_path if app_row else None
+            plan.append(
+                (j.id, j.title, j.company_name, url, cv_path, app_row and app_row.cover_letter)
+            )
+
+    if not plan:
+        typer.echo(
+            "nada pronto na fila automática (precisa de nota >= "
+            f"{threshold}, sem alertas, e CV ajustado: rode `night-shift docs`)"
+        )
+        return
+
+    mode = "prévia (sem enviar)" if preview else "assistida: você confere e envia"
+    typer.echo(f"{len(plan)} vaga(s), modo {mode}")
+    results: dict[str, int] = {}
+    with AssistedApplier(
+        paths.browser_profile_dir,
+        paths.shots_dir,
+        headless=preview,
+        wait_minutes=profile.application.wait_minutes,
+    ) as applier:
+        for n, (job_id, title, company, url, cv_path, letter) in enumerate(plan, 1):
+            if stop.is_set():
+                typer.echo("parada solicitada")
+                break
+            typer.echo(f"[{n}/{len(plan)}] {title} — {company}")
+            if url is None or not cv_path:
+                typer.echo("  pulada: sem URL do formulário ou sem CV ajustado")
+                continue
+            cand = build_candidate(profile, cv, Path(cv_path), letter)
+            outcome = applier.apply(job_id, url, cand, preview=preview)
+            with pipeline.sessions.begin() as s:
+                ApplyRepository(s, threshold).save_outcome(
+                    job_id, outcome.as_dict(), applied=outcome.status == "applied"
+                )
+            results[outcome.status] = results.get(outcome.status, 0) + 1
+            r = outcome.report
+            detail = (
+                f"{len(r.filled)} preenchido(s), "
+                f"CV {'anexado' if r.resume_attached else 'NÃO anexado'}, "
+                f"{len(r.unanswered_required)} obrigatório(s) para você, "
+                f"{len(r.sensitive_skipped)} sensível(is) não tocado(s)"
+                + (f", captcha {r.captcha}" if r.captcha else "")
+                if r
+                else outcome.message
+            )
+            typer.echo(f"  {outcome.status}: {detail}")
+    typer.echo(f"resumo: {results}")
 
 
 # ------------------------------------------------------- agendamento e turn-off

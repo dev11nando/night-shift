@@ -236,3 +236,37 @@ def test_hoje_shows_schedule_and_turn_off_button(sessions, seeded):
 def test_turn_off_button_hidden_without_handler(client, seeded):
     assert "/system/off" not in client.get("/").text
     assert client.post("/system/off", headers=HX).status_code == 404
+
+
+def test_assisted_apply_shows_in_applied_tab_with_screenshots(sessions, seeded, tmp_path):
+    shots = tmp_path / "output" / "applications"
+    shots.mkdir(parents=True)
+    filled = shots / "1-preenchido.png"
+    filled.write_bytes(b"\x89PNG fake")
+    with sessions.begin() as s:
+        s.add(
+            Application(
+                job_id=seeded["top"],
+                risk=RiskLevel.LOW,
+                status=ApplicationStatus.AUTO_APPLIED,
+                answers={
+                    "apply": {
+                        "status": "applied",
+                        "filled": ["Nome*", "E-mail*"],
+                        "resume_attached": True,
+                        "unanswered_required": [],
+                        "captcha": "recaptcha",
+                        "filled_shot": str(filled),
+                        "confirmed_shot": str(tmp_path / "fora.png"),
+                    }
+                },
+            )
+        )
+    client = TestClient(create_app(sessions, shots_dir=shots))
+
+    html = client.get("/fila?view=aplicadas").text
+    assert "Aplicada com o night-shift" in html and "2 campo(s) preenchido(s)" in html
+    assert "Aplicadas (1)" in html
+    assert client.get(f"/jobs/{seeded['top']}/shot/preenchido").status_code == 200
+    assert client.get(f"/jobs/{seeded['top']}/shot/confirmado").status_code == 404, "fora da pasta"
+    assert client.get(f"/jobs/{seeded['top']}/shot/qualquer").status_code == 404

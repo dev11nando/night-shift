@@ -53,6 +53,16 @@ class ProjectPaths:
         return self.root / "output" / "cv"
 
     @property
+    def shots_dir(self) -> Path:
+        """Prints dos formulários preenchidos e das confirmações (gitignored)."""
+        return self.root / "output" / "applications"
+
+    @property
+    def browser_profile_dir(self) -> Path:
+        """Perfil do navegador da aplicação assistida (cookies e logins)."""
+        return self.data_dir / "browser-profile"
+
+    @property
     def companies_file(self) -> Path:
         return self.config_dir / "companies.yaml"
 

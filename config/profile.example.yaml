@@ -42,6 +42,14 @@ llm:
   claude_daily_letters: 10
   claude_daily_outreach: 5
 
+application:                          # night-shift apply (aplicação assistida)
+  current_company: null               # campo "empresa atual"; null = deixa para você
+  wait_minutes: 15                    # tempo para você conferir e enviar cada formulário
+  answers:                            # respostas fixas, casadas pelo rótulo do campo (regex)
+    - {pattern: "pretens|salary expectation", answer: "R$ 6.000 (CLT)"}
+    - {pattern: "relocation|mudan.a de cidade", answer: "Não preciso de mudança"}
+  # CPF, raça, gênero, orientação, deficiência etc. NUNCA são preenchidos, mesmo se casarem.
+
 turn_off:
   grace_seconds: 30
   stop_ollama: false

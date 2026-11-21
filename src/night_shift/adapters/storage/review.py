@@ -69,8 +69,8 @@ class ReviewRepository:
             pending = [sc for sc in pending if self.lane(sc) is lane]
         return list(pending[:limit])
 
-    def decided(self, status: ApplicationStatus, limit: int = 100) -> Sequence[Score]:
-        q = self._scored().where(Application.status == status)
+    def decided(self, statuses: tuple[ApplicationStatus, ...], limit: int = 100) -> Sequence[Score]:
+        q = self._scored().where(Application.status.in_(statuses))
         return self.s.scalars(q.order_by(Application.updated_at.desc()).limit(limit)).unique().all()
 
     def counts(self) -> QueueCounts:
@@ -83,7 +83,8 @@ class ReviewRepository:
         return QueueCounts(
             auto=lanes.count(Lane.AUTO),
             manual=lanes.count(Lane.MANUAL),
-            applied=by_status.get(ApplicationStatus.APPLIED_MANUAL, 0),
+            applied=by_status.get(ApplicationStatus.APPLIED_MANUAL, 0)
+            + by_status.get(ApplicationStatus.AUTO_APPLIED, 0),
             discarded=by_status.get(ApplicationStatus.DISCARDED, 0),
         )
 

@@ -5,7 +5,7 @@ usando um LLM (Claude Haiku pela sua assinatura, ou Ollama local), prepara CV aj
 para as melhores, separa o que dá para aplicar sozinho do que precisa de você e rascunha e-mails
 de apresentação para empresas-alvo.
 
-> Status: **Fase 4 (agendamento e turn-off)**. Veja o [escopo do MVP](docs/ESCOPO.md).
+> Status: **Fase 5 (aplicação assistida)**. Veja o [escopo do MVP](docs/ESCOPO.md).
 
 ## Ideia em uma linha
 
@@ -58,6 +58,19 @@ uv run night-shift db enrich           # extrai nível/contrato/salário de vaga
 uv run night-shift companies probe nubank stone   # descobre o ATS de uma empresa
 ```
 
+### Aplicar (assistido)
+
+```powershell
+uv run night-shift apply               # abre as vagas da fila automática já preenchidas
+uv run night-shift apply --job 589     # uma vaga específica (Greenhouse/Lever/Ashby)
+uv run night-shift apply --preview     # só preenche e tira print, sem enviar
+```
+
+O sistema preenche dados, CV ajustado e carta; **você confere, completa e clica em enviar**.
+Ele nunca envia sozinho e nunca preenche CPF, raça, gênero, orientação ou deficiência.
+Configure `application.current_company` e `application.answers` no `profile.yaml` e o
+LinkedIn em `contact.linkedin` do `cv_master.yaml` para sobrar menos campo para você.
+
 ### Rodar sozinho toda noite
 
 ```powershell
@@ -83,4 +96,4 @@ uv run alembic revision --autogenerate -m "descricao"   # após mudar models.py
 ## Stack
 
 Python 3.13 · Typer · httpx · SQLAlchemy 2 · Alembic · Pydantic 2 · SQLite · Claude Code CLI · fpdf2 ·
-FastAPI + Jinja2 + HTMX · pywin32 (Job Object) · a seguir: Playwright
+FastAPI + Jinja2 + HTMX · Playwright · pywin32 (Job Object)
