@@ -57,9 +57,10 @@ class ApplicationStatus(StrEnum):
 
 
 class OutreachStatus(StrEnum):
-    DRAFT = "draft"
+    DRAFT = "draft"  # escrito, esperando você aprovar no painel
     SENT = "sent"
     REPLIED = "replied"
+    DISCARDED = "discarded"
 
 
 class RunStatus(StrEnum):

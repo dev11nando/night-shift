@@ -59,6 +59,11 @@ class Company(Base):
     ats: Mapped[str | None] = mapped_column(String(30))
     ats_slug: Mapped[str | None] = mapped_column(String(200))
     outreach_contact: Mapped[str | None] = mapped_column(String(320))
+    # Página do próprio site da empresa onde o e-mail público de RH foi encontrado.
+    contact_source_url: Mapped[str | None] = mapped_column(String(500))
+    careers_url: Mapped[str | None] = mapped_column(String(500))
+    contact_checked_at: Mapped[datetime | None]
+    about: Mapped[str | None] = mapped_column(Text)
     last_contacted_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
@@ -134,14 +139,18 @@ class Outreach(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"))
+    to_address: Mapped[str | None] = mapped_column(String(320))  # None = só LinkedIn
     gmail_draft_id: Mapped[str | None] = mapped_column(String(200))
     subject: Mapped[str] = mapped_column(String(300))
-    body: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text)  # versão e-mail
+    linkedin_note: Mapped[str | None] = mapped_column(String(300))
     status: Mapped[OutreachStatus] = mapped_column(
         str_enum(OutreachStatus), default=OutreachStatus.DRAFT
     )
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
     sent_at: Mapped[datetime | None]
+
+    company: Mapped[Company] = relationship()
 
 
 class Run(Base):

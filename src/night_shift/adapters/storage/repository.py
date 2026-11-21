@@ -42,7 +42,10 @@ class JobRepository:
             row = existing.get(cfg.name) or Company(name=cfg.name)
             row.sector, row.website = cfg.sector, cfg.website
             row.ats, row.ats_slug = cfg.ats, cfg.slug
-            row.outreach_contact = cfg.outreach_contact
+            # Contato manual do YAML vence; sem ele, mantém o que o `discover` achou.
+            if cfg.outreach_contact:
+                row.outreach_contact = cfg.outreach_contact
+                row.contact_source_url = "config/companies.yaml"
             self.s.add(row)
             existing[cfg.name] = row
         self.s.flush()

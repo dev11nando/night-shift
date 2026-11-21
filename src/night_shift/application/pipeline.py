@@ -15,7 +15,8 @@ from pathlib import Path
 from sqlalchemy.orm import Session, sessionmaker
 
 from night_shift.adapters.storage.documents import DocumentsRepository
-from night_shift.adapters.storage.models import Job, Run, Score, utcnow
+from night_shift.adapters.storage.models import Company, Job, Run, Score, utcnow
+from night_shift.adapters.storage.outreach import OutreachRepository
 from night_shift.adapters.storage.repository import JobRepository, to_posting
 from night_shift.application.documents import (
     LETTER_SYSTEM,
@@ -25,6 +26,12 @@ from night_shift.application.documents import (
     letter_prompt,
     tailor_prompt,
     validate_letter,
+)
+from night_shift.application.outreach import SYSTEM as OUTREACH_SYSTEM
+from night_shift.application.outreach import (
+    OutreachMessage,
+    outreach_prompt,
+    validate_outreach,
 )
 from night_shift.application.scoring import (
     SYSTEM_PROMPT,
@@ -246,7 +253,7 @@ class Pipeline:
             suffix = "" if letter else "  (sem carta)"
             self.log(f"  [{n}/{len(ids)}] {job.title} — {job.company_name}{suffix}")
 
-    def _two_tries[T](self, what: str, job: JobPosting, attempt: Callable[[str], T]) -> T | None:
+    def _two_tries[T](self, what: str, label: str, attempt: Callable[[str], T]) -> T | None:
         """Chama ``attempt(feedback)`` até 2 vezes; na 2ª, o feedback é o erro da 1ª."""
         feedback, last = "", None
         for _ in range(2):
@@ -257,7 +264,7 @@ class Pipeline:
             except Exception as e:
                 last = e
                 feedback = f"\n\nA tentativa anterior foi rejeitada: {e}. Corrija isso."
-        self._error(f"{what} em '{job.title}': {last}")
+        self._error(f"{what} em '{label}': {last}")
         return None
 
     def _tailor(
@@ -268,7 +275,7 @@ class Pipeline:
             sel = llm.complete_json(TAILOR_SYSTEM, prompt, CVSelection)
             return apply_selection(cv, sel)
 
-        return self._two_tries("seleção do CV", job, attempt) or default_cv(cv)
+        return self._two_tries("seleção do CV", job.title, attempt) or default_cv(cv)
 
     def _letter(
         self, llm: LLMProvider, profile: Profile, cv: CVMaster, job: JobPosting
@@ -279,7 +286,69 @@ class Pipeline:
             letter = llm.complete_json(LETTER_SYSTEM, prompt + feedback, CoverLetter)
             return validate_letter(letter, profile, cv, job)
 
-        return self._two_tries("carta", job, attempt)
+        return self._two_tries("carta", job.title, attempt)
+
+    def discover_contacts(self, finder, limit: int = 1000) -> None:
+        """Varre o site das empresas (nunca varridas ou há mais de 30 dias) atrás do e-mail
+        público de recrutamento, da página de carreiras e de uma descrição."""
+        self.log("contatos públicos das empresas")
+        self._progress("contatos")
+        with self.sessions() as s:
+            todo = [
+                (c.id, c.name, c.website) for c in OutreachRepository(s).needing_discovery(limit)
+            ]
+        for n, (company_id, name, website) in enumerate(todo, 1):
+            self._check_stop()
+            self._progress("contatos", f"[{n}/{len(todo)}] {name}")
+            found = finder.discover(website)
+            with self.sessions.begin() as s:
+                company = s.get_one(Company, company_id)
+                OutreachRepository(s).save_discovery(
+                    company, found.contact, found.source_url, found.careers_url, found.about
+                )
+            self._count("companies_checked")
+            if found.contact:
+                self._count("contacts_found")
+                self.log(f"  {name}: {found.contact}")
+        if todo:
+            found_n = self.stats.get("contacts_found", 0)
+            self.log(f"  {len(todo)} site(s) varrido(s), {found_n} e-mail(s) de RH")
+
+    def outreach(
+        self,
+        llm: LLMProvider,
+        profile: Profile,
+        cv: CVMaster,
+        daily_limit: int,
+        budget_seconds: float | None = None,
+    ) -> None:
+        """Escreve mensagens de outreach (nota do LinkedIn + e-mail) para até ``daily_limit``
+        empresas por dia. Nada é enviado: tudo fica no painel esperando você."""
+        self.start_budget(budget_seconds)
+        self._progress("outreach")
+        with self.sessions() as s:
+            repo = OutreachRepository(s)
+            room = daily_limit - repo.generated_today()
+            todo = [(c.id, c.name, c.sector, c.about) for c in repo.candidates(max(room, 0))]
+        self.log(f"outreach ({llm.model}, {len(todo)} empresa(s), limite {daily_limit}/dia)")
+        for n, (company_id, name, sector, about) in enumerate(todo, 1):
+            self._check_stop()
+            if self._time_up(len(todo) - n + 1, "outreach_deferred"):
+                break
+            self._progress("outreach", f"[{n}/{len(todo)}] {name}")
+            prompt = outreach_prompt(profile, cv, name, sector, about)
+
+            def attempt(feedback: str, prompt=prompt, about=about):
+                msg = llm.complete_json(OUTREACH_SYSTEM, prompt + feedback, OutreachMessage)
+                return validate_outreach(msg, profile, cv, about)
+
+            msg = self._two_tries("outreach", name, attempt)
+            if msg is None:
+                continue
+            with self.sessions.begin() as s:
+                OutreachRepository(s).save_message(s.get_one(Company, company_id), msg)
+            self._count("outreach")
+            self.log(f"  [{n}/{len(todo)}] {name}")
 
     # ------------------------------------------------------------- orquestração
 

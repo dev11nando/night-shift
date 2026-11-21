@@ -103,7 +103,9 @@ class LLMConfig(BaseModel):
     claude_daily_letters: int = Field(
         default=10, ge=0, description="Máximo de vagas com CV+carta gerados por execução."
     )
-    claude_daily_outreach: int = Field(default=5, ge=0)
+    claude_daily_outreach: int = Field(
+        default=10, ge=0, description="Mensagens de outreach escritas por dia (nada é enviado)."
+    )
 
 
 class FixedAnswer(BaseModel):
