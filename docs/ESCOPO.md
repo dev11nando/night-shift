@@ -319,3 +319,25 @@ deixados em branco, 11 obrigatórios para o candidato, reCAPTCHA presente.
   e carta em inglês.
 - **CV completo em PDF** para aplicações manuais: `night-shift cv pdf` gera
   `output/cv/curriculo.pdf` e `output/cv/resume-en.pdf`, com todas as habilidades.
+
+---
+
+## 15. Outreach (Fase 6, 21/11/2026)
+
+**Decisão:** LinkedIn é o canal principal; e-mail só quando a empresa publica uma caixa de
+recrutamento ou quando o usuário adiciona um contato. Motivo, medido nos 88 sites da lista:
+**1** publica e-mail de RH (NeuralMind, `talentos@`), 32 só têm caixas gerais (contato,
+imprensa, suporte, vendas), 64 têm página de carreiras e 85 têm descrição. E-mail de pessoa
+(nome.sobrenome@) nunca é usado nem adivinhado (LGPD); caixa geral também não.
+
+- `night-shift outreach` (e a etapa no `run`): varre o site de cada empresa (robots.txt
+  respeitado, a cada 30 dias) atrás do e-mail público de RH, da página de carreiras e da
+  descrição; escreve até `llm.claude_daily_outreach` (10) mensagens por dia: **nota de
+  conexão do LinkedIn** (≤ 300 caracteres) e **e-mail** (≤ 130 palavras), validadas (sem
+  campo para preencher, com assinatura, sem tecnologia fora do CV e da descrição).
+- Prioridade: empresas com e-mail, depois fintech → banco digital → IA → fundo → tech.
+  Sem recontato por 60 dias depois de enviada.
+- Aba **Outreach** do painel: nota e e-mail prontos para copiar, link para buscar
+  recrutadores da empresa no LinkedIn, página de carreiras, **Abrir no Gmail** com tudo
+  preenchido (você anexa o CV e envia), **Marcar enviada**, **Descartar**, **Responderam**.
+  Nada sai sozinho. A API do Gmail ficou para depois, se o volume de e-mail crescer.
