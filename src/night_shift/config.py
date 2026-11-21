@@ -106,6 +106,26 @@ class LLMConfig(BaseModel):
     claude_daily_outreach: int = Field(default=5, ge=0)
 
 
+class FixedAnswer(BaseModel):
+    pattern: str = Field(description="Regex (sem diferenciar maiúsculas) aplicada ao rótulo.")
+    answer: str
+
+
+class ApplicationConfig(BaseModel):
+    """Dados da aplicação assistida (`night-shift apply`)."""
+
+    current_company: str | None = Field(
+        default=None, description="Para o campo 'empresa atual'. Vazio = deixa para você."
+    )
+    answers: list[FixedAnswer] = Field(
+        default=[],
+        description="Respostas fixas para perguntas de texto, casadas pelo rótulo do campo.",
+    )
+    wait_minutes: int = Field(
+        default=15, ge=1, description="Quanto tempo esperar você enviar cada formulário."
+    )
+
+
 class TurnOffConfig(BaseModel):
     grace_seconds: int = Field(default=30, ge=0)
     stop_ollama: bool = False
@@ -117,6 +137,7 @@ class Profile(BaseModel):
     preferences: Preferences = Preferences()
     automation: AutomationConfig = AutomationConfig()
     llm: LLMConfig = LLMConfig()
+    application: ApplicationConfig = ApplicationConfig()
     turn_off: TurnOffConfig = TurnOffConfig()
 
 
