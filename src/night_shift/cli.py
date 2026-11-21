@@ -1,7 +1,10 @@
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
+from datetime import time as dt_time
+from pathlib import Path
 
 import typer
 
@@ -9,6 +12,7 @@ from night_shift import __version__
 from night_shift.adapters.llm.claude_cli import ClaudeCLI, find_executable
 from night_shift.adapters.llm.ollama import OllamaEmbedder, OllamaLLM
 from night_shift.adapters.render.cv_pdf import render_cv_pdf
+from night_shift.adapters.scheduler.windows_task import WindowsTaskScheduler
 from night_shift.adapters.sources import build_sources
 from night_shift.adapters.sources.ats import ATS_SOURCES
 from night_shift.adapters.sources.http import PoliteClient, make_client
@@ -23,6 +27,7 @@ from night_shift.config import (
     ConfigError,
     LLMConfig,
     Profile,
+    TurnOffConfig,
     bootstrap_config,
     load_companies,
     load_cv,
@@ -33,8 +38,12 @@ from night_shift.domain.filters import HardFilter
 from night_shift.paths import ProjectPaths
 from night_shift.ports import SourceError
 from night_shift.runtime.job_object import IS_WINDOWS, is_store_python
-from night_shift.runtime.lifecycle import enter_managed_process
+from night_shift.runtime.lifecycle import enter_managed_process, running_pipeline
+from night_shift.runtime.logs import open_run_log, tee
+from night_shift.runtime.pids import PidRegistry
+from night_shift.runtime.shortcuts import create_desktop_shortcuts
 from night_shift.runtime.stop_flag import StopFlag
+from night_shift.runtime.turn_off import stop_ollama, turn_off, turn_on
 
 app = typer.Typer(
     help="night-shift: busca, avalia e se candidata a vagas enquanto você dorme.",
@@ -44,6 +53,8 @@ db_app = typer.Typer(help="Banco de dados (SQLite + Alembic).", no_args_is_help=
 app.add_typer(db_app, name="db")
 companies_app = typer.Typer(help="Empresas-alvo.", no_args_is_help=True)
 app.add_typer(companies_app, name="companies")
+schedule_app = typer.Typer(help="Tarefa diária no Agendador do Windows.", no_args_is_help=True)
+app.add_typer(schedule_app, name="schedule")
 
 
 @app.callback()
@@ -188,18 +199,31 @@ def _pipeline(paths: ProjectPaths) -> Pipeline:
 
 
 def _run_steps(name: str, steps_factory) -> None:
-    """Executa etapas do pipeline como processo gerenciado (Job Object + PID registrado)."""
+    """Executa etapas do pipeline como processo gerenciado (Job Object + PID registrado),
+    uma execução por vez, com log em ``logs/``."""
     paths = _paths()
+    other = running_pipeline(paths)
+    if other is not None:
+        msg = (
+            f"já tem um `{other.name}` rodando (PID {other.pid}); espere terminar ou use "
+            "`night-shift off`"
+        )
+        # Vai para o log também: a tarefa agendada roda sem ninguém vendo o terminal.
+        with open_run_log(paths.logs_dir, f"{name}-recusado") as logfile:
+            tee(lambda m: typer.secho(m, fg="yellow", err=True), logfile)(msg)
+        raise typer.Exit(3)
     enter_managed_process(paths, name)
     profile = _load_or_exit(load_profile, paths.profile_file)
     pipeline = _pipeline(paths)
-    pipeline.stop.clear()
-    run = pipeline.run(steps_factory(paths, profile, pipeline))
-    typer.echo(f"\nrun #{run.id}: {run.status} {run.stats}")
-    if run.errors:
-        typer.secho(f"{len(run.errors)} erro(s):", fg="yellow")
-        for err in run.errors:
-            typer.echo(f"  - {err}")
+    with open_run_log(paths.logs_dir, name) as logfile:
+        pipeline.log = tee(typer.echo, logfile)
+        pipeline.stop.clear()
+        run = pipeline.run(steps_factory(paths, profile, pipeline))
+        pipeline.log(f"\nrun #{run.id}: {run.status} {run.stats}")
+        if run.errors:
+            pipeline.log(f"{len(run.errors)} erro(s):")
+            for err in run.errors:
+                pipeline.log(f"  - {err}")
     if run.status is RunStatus.FAILED:
         raise typer.Exit(1)
 
@@ -382,7 +406,24 @@ def serve(
         threshold = load_profile(paths.profile_file).automation.auto_apply_min_score
     except ConfigError:
         threshold = AutomationConfig().auto_apply_min_score
-    web_app = create_app(pipeline.sessions, auto_threshold=threshold, cv_dir=paths.cv_output_dir)
+    scheduler = _scheduler()
+
+    def turn_everything_off() -> list[str]:
+        report = turn_off(
+            paths, scheduler, _grace_seconds(paths), ollama=_ollama_stopper(paths), log=typer.echo
+        )
+        # O painel se desliga por último, depois de devolver o relatório para o navegador.
+        PidRegistry(paths.run_dir).unregister()
+        threading.Timer(1.5, os._exit, args=[0]).start()
+        return report.lines()
+
+    web_app = create_app(
+        pipeline.sessions,
+        auto_threshold=threshold,
+        cv_dir=paths.cv_output_dir,
+        schedule_status=(lambda: scheduler.status().describe()) if scheduler else None,
+        on_turn_off=turn_everything_off,
+    )
     uvicorn.run(web_app, host="127.0.0.1", port=port, log_level="warning")
 
 
@@ -393,6 +434,132 @@ def db_enrich() -> None:
     with pipeline.sessions.begin() as s:
         n = JobRepository(s).enrich_existing()
     typer.echo(f"{n} vaga(s) atualizada(s)")
+
+
+# ------------------------------------------------------- agendamento e turn-off
+
+
+def _venv_exe() -> Path:
+    """O ``night-shift.exe`` da venv atual (é o que a tarefa e os atalhos executam)."""
+    return Path(sys.executable).parent / "night-shift.exe"
+
+
+def _scheduler() -> WindowsTaskScheduler | None:
+    return WindowsTaskScheduler() if IS_WINDOWS else None
+
+
+def _parse_time(value: str) -> dt_time:
+    try:
+        return dt_time.fromisoformat(value)
+    except ValueError as e:
+        raise typer.BadParameter("use HH:MM, ex.: 02:00") from e
+
+
+@schedule_app.command("install")
+def schedule_install(
+    at: str = typer.Option("02:00", "--at", help="Horário diário (HH:MM)."),
+    max_hours: int = typer.Option(3, "--max-hours", help="Tempo máximo de uma execução."),
+) -> None:
+    """Cria (ou atualiza) a tarefa diária `night-shift run` no Agendador do Windows."""
+    scheduler = _scheduler()
+    if scheduler is None:
+        typer.secho("agendamento só no Windows", fg="red", err=True)
+        raise typer.Exit(2)
+    paths = _paths()
+    exe = _venv_exe()
+    scheduler.install(exe, "run", paths.root, _parse_time(at), max_hours)
+    StopFlag(paths.run_dir).clear()
+    typer.echo(f"agendado: {scheduler.status().describe()}")
+    typer.echo(f"  comando: {exe} run   (pasta {paths.root})")
+    typer.echo(f"  logs em: {paths.logs_dir}")
+
+
+@schedule_app.command("status")
+def schedule_status() -> None:
+    """Mostra se a tarefa diária existe, está ligada e o horário."""
+    scheduler = _scheduler()
+    typer.echo(scheduler.status().describe() if scheduler else "agendamento só no Windows")
+
+
+@schedule_app.command("remove")
+def schedule_remove() -> None:
+    """Apaga a tarefa diária do Agendador."""
+    scheduler = _scheduler()
+    removed = scheduler.remove() if scheduler else False
+    typer.echo("tarefa removida" if removed else "não havia tarefa agendada")
+
+
+@schedule_app.command("run-now")
+def schedule_run_now() -> None:
+    """Dispara a tarefa agendada agora (testa o mesmo caminho da execução da noite)."""
+    scheduler = _scheduler()
+    if scheduler is None or not scheduler.status().installed:
+        typer.secho("não há tarefa agendada; rode `night-shift schedule install`", fg="red")
+        raise typer.Exit(2)
+    scheduler.run_now()
+    typer.echo(f"disparada; acompanhe em {_paths().logs_dir}")
+
+
+def _ollama_stopper(paths: ProjectPaths):
+    try:
+        profile = load_profile(paths.profile_file)
+    except ConfigError:
+        return lambda: None
+    llm, off_cfg = profile.llm, profile.turn_off
+    if llm.provider != "ollama" and not off_cfg.stop_ollama:
+        return lambda: None
+    return lambda: stop_ollama(llm.local_model, kill_server=off_cfg.stop_ollama)
+
+
+def _grace_seconds(paths: ProjectPaths) -> int:
+    try:
+        return load_profile(paths.profile_file).turn_off.grace_seconds
+    except ConfigError:
+        return TurnOffConfig().grace_seconds
+
+
+@app.command()
+def off(
+    grace: int | None = typer.Option(
+        None, "--grace", help="Segundos para o pipeline parar sozinho (padrão: profile, 30)."
+    ),
+) -> None:
+    """Desliga TUDO do night-shift: pipeline, painel, processos filhos e a tarefa agendada."""
+    paths = _paths()
+    report = turn_off(
+        paths,
+        _scheduler(),
+        grace if grace is not None else _grace_seconds(paths),
+        ollama=_ollama_stopper(paths),
+        log=typer.echo,
+    )
+    for line in report.lines():
+        typer.echo(f"- {line}")
+    typer.echo("pronto. Para religar: night-shift on")
+    if report.survivors:
+        raise typer.Exit(1)
+
+
+@app.command()
+def on() -> None:
+    """Religa a tarefa agendada e libera o pipeline depois de um `off`."""
+    had_task = turn_on(_paths(), _scheduler())
+    status = _scheduler().status().describe() if had_task else "sem tarefa agendada"
+    typer.echo(f"ligado ({status})")
+    if not had_task:
+        typer.echo("para agendar: night-shift schedule install --at 02:00")
+
+
+@app.command()
+def shortcuts() -> None:
+    """Cria na área de trabalho os atalhos 'night-shift OFF', 'ON' e 'Painel'."""
+    if not IS_WINDOWS:
+        typer.secho("atalhos só no Windows", fg="red", err=True)
+        raise typer.Exit(2)
+    paths = _paths()
+    created = create_desktop_shortcuts(_venv_exe(), paths.root)
+    for path in created:
+        typer.echo(f"criado: {path}")
 
 
 @companies_app.command("probe")

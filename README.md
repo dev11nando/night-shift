@@ -5,7 +5,7 @@ usando um LLM (Claude Haiku pela sua assinatura, ou Ollama local), prepara CV aj
 para as melhores, separa o que dá para aplicar sozinho do que precisa de você e rascunha e-mails
 de apresentação para empresas-alvo.
 
-> Status: **Fase 3 (CV ajustado e carta)**. Veja o [escopo do MVP](docs/ESCOPO.md).
+> Status: **Fase 4 (agendamento e turn-off)**. Veja o [escopo do MVP](docs/ESCOPO.md).
 
 ## Ideia em uma linha
 
@@ -57,6 +57,20 @@ uv run night-shift jobs -n 20          # melhores vagas avaliadas, no terminal
 uv run night-shift db enrich           # extrai nível/contrato/salário de vagas antigas
 uv run night-shift companies probe nubank stone   # descobre o ATS de uma empresa
 ```
+
+### Rodar sozinho toda noite
+
+```powershell
+uv run night-shift schedule install --at 02:00   # tarefa diária no Agendador do Windows
+uv run night-shift schedule status               # "todo dia às 02:00"
+uv run night-shift schedule run-now              # dispara agora, pelo mesmo caminho da noite
+uv run night-shift off                           # desliga TUDO (pipeline, painel, tarefa)
+uv run night-shift on                            # religa
+uv run night-shift shortcuts                     # atalhos OFF / ON / Painel na área de trabalho
+```
+
+Cada execução grava um log em `logs/`. O PC precisa estar ligado (pode estar suspenso: a
+tarefa acorda o PC) e com você logado.
 
 ## Desenvolvimento
 

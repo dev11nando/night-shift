@@ -1,6 +1,6 @@
 """Painel local: relatório da noite, fila de revisão e mercado (docs/ESCOPO.md §8)."""
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
@@ -66,7 +66,11 @@ templates.env.globals.update(duration=duration, version=__version__)
 
 
 def create_app(
-    sessions: sessionmaker[Session], auto_threshold: int = 85, cv_dir: Path | None = None
+    sessions: sessionmaker[Session],
+    auto_threshold: int = 85,
+    cv_dir: Path | None = None,
+    schedule_status: Callable[[], str] | None = None,
+    on_turn_off: Callable[[], list[str]] | None = None,
 ) -> FastAPI:
     """``auto_threshold``: nota mínima para uma vaga de fonte de baixo risco ir para a fila
     automática (``automation.auto_apply_min_score`` no profile.yaml)."""
@@ -102,6 +106,8 @@ def create_app(
             last=last,
             older=runs[1:],
             best=repo.best_of_run(last) if last else [],
+            schedule=schedule_status() if schedule_status else None,
+            can_turn_off=on_turn_off is not None,
         )
 
     @app.get("/fila", response_class=HTMLResponse)
@@ -173,6 +179,15 @@ def create_app(
         if cv_dir is None or not pdf.is_relative_to(cv_dir.resolve()) or not pdf.exists():
             raise HTTPException(404, "arquivo do CV não encontrado")
         return FileResponse(pdf, media_type="application/pdf", filename=pdf.name)
+
+    @app.post("/system/off", response_class=HTMLResponse)
+    def system_off(request: Request):
+        if request.headers.get("HX-Request") != "true":
+            raise HTTPException(403, "use o painel")
+        if on_turn_off is None:
+            raise HTTPException(404)
+        lines = on_turn_off()
+        return templates.TemplateResponse(request, "_turned_off.html", {"lines": lines})
 
     @app.get("/healthz")
     def healthz():

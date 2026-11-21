@@ -212,3 +212,27 @@ def test_card_shows_letter_and_serves_cv_only_from_cv_dir(sessions, seeded, tmp_
     assert resp.status_code == 200 and resp.content.startswith(b"%PDF")
     assert client.get(f"/jobs/{seeded['mid']}/cv").status_code == 404, "fora da pasta de CVs"
     assert client.get(f"/jobs/{seeded['low']}/cv").status_code == 404, "sem CV"
+
+
+def test_hoje_shows_schedule_and_turn_off_button(sessions, seeded):
+    calls = []
+    client = TestClient(
+        create_app(
+            sessions,
+            schedule_status=lambda: "todo dia às 02:00",
+            on_turn_off=lambda: calls.append(1) or ["tarefa agendada desligada"],
+        )
+    )
+    html = client.get("/").text
+    assert "Agendamento: todo dia às 02:00" in html
+    assert 'hx-post="/system/off"' in html
+
+    assert client.post("/system/off").status_code == 403
+    resp = client.post("/system/off", headers=HX)
+    assert "night-shift desligado" in resp.text and "tarefa agendada desligada" in resp.text
+    assert calls == [1]
+
+
+def test_turn_off_button_hidden_without_handler(client, seeded):
+    assert "/system/off" not in client.get("/").text
+    assert client.post("/system/off", headers=HX).status_code == 404

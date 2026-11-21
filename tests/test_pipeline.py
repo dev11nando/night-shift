@@ -192,3 +192,16 @@ def test_stop_flag_halts_between_steps(pipeline):
     with pipeline.sessions() as s:
         assert s.scalar(select(func.count(Job.id))) == 0
         assert s.scalars(select(Run)).one().finished_at is not None
+
+
+def test_interrupted_run_is_marked_and_next_run_continues(pipeline):
+    with pipeline.sessions.begin() as s:
+        s.add(Run(stats={}, errors=[]))  # ficou "running": o processo morreu no meio
+
+    run = full_run(pipeline, [FakeSource("a", [GOOD])], FakeLLM())
+
+    assert run.status is RunStatus.SUCCESS
+    with pipeline.sessions() as s:
+        first = s.scalars(select(Run).order_by(Run.id)).first()
+        assert first.status is RunStatus.FAILED
+        assert "interrompida" in first.errors[-1]

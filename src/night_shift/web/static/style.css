@@ -127,6 +127,10 @@ details summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
 .btn:hover { border-color: var(--text); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
 .btn.ghost { background: transparent; color: var(--muted); }
+.btn.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+.btn.danger:hover { background: var(--danger); color: var(--surface); }
+.system { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; font-size: .9rem; }
+.off-report { margin: .75rem 0; padding-left: 1.25rem; }
 .htmx-request.btn { opacity: .6; }
 
 .run { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; }
