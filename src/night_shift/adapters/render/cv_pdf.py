@@ -9,21 +9,31 @@ from fpdf import FPDF
 from night_shift.domain.cv import TailoredCV
 
 FONT_DIR = Path("C:/Windows/Fonts")
-MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+MONTHS = {
+    "pt": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
+    "en": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+}
+LABELS = {
+    "pt": ["Resumo", "Experiência", "Habilidades", "Formação", "Cursos", "Idiomas"],
+    "en": ["Summary", "Experience", "Skills", "Education", "Courses", "Languages"],
+}
 
 INK = (28, 28, 26)
 MUTED = (95, 95, 90)
 RULE = (200, 200, 195)
 
 
-def format_period(period: str | None) -> str:
+def format_period(period: str | None, lang: str = "pt") -> str:
     """``2024-02/2026-08`` → ``Fev/2024 – Ago/2026``; o que não casar fica como está."""
     if not period:
         return ""
 
     def month(part: str) -> str:
         m = re.fullmatch(r"(\d{4})-(\d{2})", part.strip())
-        return f"{MONTHS[int(m.group(2)) - 1]}/{m.group(1)}" if m else part.strip()
+        if not m:
+            return part.strip()
+        name = MONTHS[lang][int(m.group(2)) - 1]
+        return f"{name} {m.group(1)}" if lang == "en" else f"{name}/{m.group(1)}"
 
     return " – ".join(month(p) for p in period.split("/"))
 
@@ -76,7 +86,8 @@ class _Doc(FPDF):
         self.ln(0.6)
 
 
-def render_cv_pdf(cv: TailoredCV, name: str, email: str, out: Path) -> Path:
+def render_cv_pdf(cv: TailoredCV, name: str, email: str, out: Path, lang: str = "pt") -> Path:
+    resumo, experiencia, habilidades, formacao, cursos, idiomas = LABELS[lang]
     m = cv.master
     doc = _Doc()
     doc.add_page()
@@ -92,10 +103,10 @@ def render_cv_pdf(cv: TailoredCV, name: str, email: str, out: Path) -> Path:
         0, 5, doc.text_safe("  ·  ".join(c for c in contact if c)), new_x="LMARGIN", new_y="NEXT"
     )
 
-    doc.section("Resumo")
+    doc.section(resumo)
     doc.paragraph(cv.summary)
 
-    doc.section("Experiência")
+    doc.section(experiencia)
     for i, exp in enumerate(cv.experiences):
         if i:
             doc.ln(2)
@@ -104,27 +115,29 @@ def render_cv_pdf(cv: TailoredCV, name: str, email: str, out: Path) -> Path:
             0, 5.5, doc.text_safe(f"{exp.role} · {exp.company}"), new_x="LMARGIN", new_y="NEXT"
         )
         doc.font(9, color=MUTED)
-        doc.cell(0, 4.6, doc.text_safe(format_period(exp.period)), new_x="LMARGIN", new_y="NEXT")
+        doc.cell(
+            0, 4.6, doc.text_safe(format_period(exp.period, lang)), new_x="LMARGIN", new_y="NEXT"
+        )
         doc.ln(1)
         for b in exp.bullets:
             doc.bullet(b.text)
 
     if cv.skills:
-        doc.section("Habilidades")
+        doc.section(habilidades)
         doc.paragraph(", ".join(cv.skills))
 
     if m.education:
-        doc.section("Formação")
+        doc.section(formacao)
         for ed in m.education:
-            period = format_period(ed.period)
+            period = format_period(ed.period, lang)
             doc.paragraph(f"{ed.course} — {ed.school}" + (f" ({period})" if period else ""))
 
     if m.courses:
-        doc.section("Cursos")
+        doc.section(cursos)
         doc.paragraph(", ".join(m.courses))
 
     if m.languages:
-        doc.section("Idiomas")
+        doc.section(idiomas)
         doc.paragraph(", ".join(f"{la.name} ({la.level})" for la in m.languages))
 
     out.parent.mkdir(parents=True, exist_ok=True)

@@ -133,7 +133,7 @@ def pipeline(paths):
 def run_docs(pipeline, tmp_path, llm, limit=5, min_score=70):
     rendered: list[TailoredCV] = []
 
-    def render(cv, out):
+    def render(cv, out, lang):
         rendered.append(cv)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(b"%PDF-fake")
@@ -196,3 +196,36 @@ def test_unavailable_llm_stops_the_stage(pipeline, tmp_path):
     run, rendered = run_docs(pipeline, tmp_path, DocsLLM(unavailable=True))
     assert run.status == "failed"
     assert rendered == []
+
+
+def test_english_job_gets_english_cv(pipeline, tmp_path):
+    from tests.test_cv import CV_EN
+
+    english = posting(
+        external_id="en1",
+        title="Backend Python Engineer",
+        description="We are looking for a backend engineer with experience in Python and the team.",
+    )
+    calls = []
+
+    def render(cv, out, lang):
+        calls.append((lang, out.name, cv.experiences[0].bullets[0].text))
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"%PDF")
+        return out
+
+    llm = DocsLLM()
+    pipeline.run(
+        [
+            lambda: pipeline.collect([FakeSource("a", [JOB, english])], []),
+            lambda: pipeline.screen(HardFilter(PROFILE.preferences)),
+            lambda: pipeline.embed_rank(BagOfWordsEmbedder(), "python fastapi"),
+            lambda: pipeline.llm_score(llm, PROFILE, "cv", top_n=5),
+            lambda: pipeline.documents(
+                llm, PROFILE, CV, render, tmp_path / "cv", 70, 5, cv_en=CV_EN
+            ),
+        ]
+    )
+    by_lang = {lang: (name, text) for lang, name, text in calls}
+    assert by_lang["en"][0].endswith("-en.pdf") and by_lang["en"][1].startswith("EN ")
+    assert not by_lang["pt"][0].endswith("-en.pdf") and not by_lang["pt"][1].startswith("EN ")

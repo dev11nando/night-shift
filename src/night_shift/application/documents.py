@@ -54,7 +54,8 @@ def _job_block(job: JobPosting) -> str:
     )
 
 
-def tailor_prompt(cv: CVMaster, job: JobPosting) -> str:
+def tailor_prompt(cv: CVMaster, job: JobPosting, lang: str = "pt") -> str:
+    language = "inglês" if lang == "en" else "português"
     catalog = {
         "summary_original": cv.summary.strip(),
         "experiences": [
@@ -79,7 +80,7 @@ Monte a seleção do currículo para esta vaga:
   `bullet_ids` com os IDs mais relevantes para a vaga primeiro (pode omitir os irrelevantes,
   mas mantenha pelo menos 2 quando existirem). Use só IDs do catálogo.
 - skills: até 14 habilidades do catálogo, escritas exatamente como estão, mais relevantes primeiro.
-- summary: 2 a 3 frases em português reescrevendo o resumo original com ênfase no que a vaga
+- summary: 2 a 3 frases em {language} reescrevendo o resumo original com ênfase no que a vaga
   pede. Use SÓ fatos do catálogo: não cite tecnologia, empresa, número ou tempo de
   experiência que não esteja lá."""
 
