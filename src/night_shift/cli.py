@@ -6,10 +6,30 @@ import urllib.request
 import typer
 
 from night_shift import __version__
+from night_shift.adapters.llm.ollama import OllamaEmbedder, OllamaLLM
+from night_shift.adapters.sources import build_sources
+from night_shift.adapters.sources.ats import ATS_SOURCES
+from night_shift.adapters.sources.http import PoliteClient, make_client
 from night_shift.adapters.storage import db
-from night_shift.config import ConfigError, bootstrap_config, load_profile
+from night_shift.adapters.storage.repository import JobRepository
+from night_shift.application.pipeline import Pipeline
+from night_shift.config import (
+    CompanyConfig,
+    ConfigError,
+    LLMConfig,
+    Profile,
+    bootstrap_config,
+    load_companies,
+    load_cv,
+    load_profile,
+)
+from night_shift.domain.enums import RunStatus
+from night_shift.domain.filters import HardFilter
 from night_shift.paths import ProjectPaths
+from night_shift.ports import SourceError
 from night_shift.runtime.job_object import IS_WINDOWS, is_store_python
+from night_shift.runtime.lifecycle import enter_managed_process
+from night_shift.runtime.stop_flag import StopFlag
 
 app = typer.Typer(
     help="night-shift: busca, avalia e se candidata a vagas enquanto você dorme.",
@@ -17,6 +37,8 @@ app = typer.Typer(
 )
 db_app = typer.Typer(help="Banco de dados (SQLite + Alembic).", no_args_is_help=True)
 app.add_typer(db_app, name="db")
+companies_app = typer.Typer(help="Empresas-alvo.", no_args_is_help=True)
+app.add_typer(companies_app, name="companies")
 
 
 @app.callback()
@@ -94,14 +116,23 @@ def doctor() -> None:
     else:
         report(False, "banco", "não existe, rode `night-shift init`")
 
-    ollama_url = profile.llm.ollama_url if profile else "http://localhost:11434"
+    # Ollama só é exigido pelo `rank`; a coleta funciona sem ele, então aqui é só aviso.
+    def warn(label: str, detail: str) -> None:
+        typer.echo(f"[{typer.style('warn', fg='yellow')}] {label}: {detail}")
+
+    llm = profile.llm if profile else LLMConfig()
     try:
-        with urllib.request.urlopen(f"{ollama_url}/api/tags", timeout=2) as resp:
+        with urllib.request.urlopen(f"{llm.ollama_url}/api/tags", timeout=2) as resp:
             models = [m["name"] for m in json.load(resp).get("models", [])]
-        report(True, "ollama", ", ".join(models) or "rodando, sem modelos baixados")
     except (urllib.error.URLError, OSError, ValueError):
-        # Ollama só é necessário a partir da Fase 1; não reprova o doctor.
-        typer.echo(f"[{typer.style('warn', fg='yellow')}] ollama: não encontrado em {ollama_url}")
+        warn("ollama", f"não encontrado em {llm.ollama_url} (necessário para `rank`)")
+    else:
+        names = {m.removesuffix(":latest") for m in models}
+        missing = [m for m in (llm.local_model, llm.embed_model) if m not in names]
+        if missing:
+            warn("ollama", "faltam modelos: " + ", ".join(f"`ollama pull {m}`" for m in missing))
+        else:
+            report(True, "ollama", f"{llm.local_model} + {llm.embed_model}")
 
     if IS_WINDOWS:
         try:
@@ -120,6 +151,127 @@ def doctor() -> None:
                 report(True, "job object", "ok")
 
     raise typer.Exit(0 if ok else 1)
+
+
+# ------------------------------------------------------------------ pipeline
+
+
+def _load_or_exit(loader, path):
+    try:
+        return loader(path)
+    except ConfigError as e:
+        typer.secho(str(e), fg="red", err=True)
+        raise typer.Exit(2) from e
+
+
+def _pipeline(paths: ProjectPaths) -> Pipeline:
+    paths.ensure_dirs()
+    db.upgrade(paths.db_url)
+    sessions = db.make_session_factory(db.make_engine(paths.db_url))
+    return Pipeline(sessions=sessions, stop=StopFlag(paths.run_dir), log=typer.echo)
+
+
+def _run_steps(name: str, steps_factory) -> None:
+    """Executa etapas do pipeline como processo gerenciado (Job Object + PID registrado)."""
+    paths = _paths()
+    enter_managed_process(paths, name)
+    profile = _load_or_exit(load_profile, paths.profile_file)
+    pipeline = _pipeline(paths)
+    pipeline.stop.clear()
+    run = pipeline.run(steps_factory(paths, profile, pipeline))
+    typer.echo(f"\nrun #{run.id}: {run.status} {run.stats}")
+    if run.errors:
+        typer.secho(f"{len(run.errors)} erro(s):", fg="yellow")
+        for err in run.errors:
+            typer.echo(f"  - {err}")
+    if run.status is RunStatus.FAILED:
+        raise typer.Exit(1)
+
+
+def _collect_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline):
+    companies = _load_or_exit(load_companies, paths.companies_file)
+    http = PoliteClient(make_client())
+    sources = build_sources(http, companies, profile.preferences)
+    return [
+        lambda: pipeline.collect(sources, companies),
+        lambda: pipeline.screen(HardFilter(profile.preferences)),
+    ]
+
+
+def _rank_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline, top: int | None):
+    cv_text = _load_or_exit(load_cv, paths.cv_file).as_text()
+    llm_cfg = profile.llm
+    embedder = OllamaEmbedder(llm_cfg.ollama_url, llm_cfg.embed_model)
+    llm = OllamaLLM(llm_cfg.ollama_url, llm_cfg.local_model, think=llm_cfg.think)
+    return [
+        lambda: pipeline.screen(HardFilter(profile.preferences)),
+        lambda: pipeline.embed_rank(embedder, cv_text),
+        lambda: pipeline.llm_score(llm, profile, cv_text, top or llm_cfg.rank_top_n),
+    ]
+
+
+TopOption = typer.Option(None, "--top", help="Quantas vagas mandar ao LLM (padrão: profile).")
+
+
+@app.command()
+def collect() -> None:
+    """Busca vagas novas em todas as fontes e aplica o filtro por regra."""
+    _run_steps("collect", _collect_steps)
+
+
+@app.command()
+def rank(top: int | None = TopOption) -> None:
+    """Compara as vagas filtradas com o CV (embeddings) e dá nota às melhores (LLM local)."""
+    _run_steps("rank", lambda p, prof, pipe: _rank_steps(p, prof, pipe, top))
+
+
+@app.command()
+def run(top: int | None = TopOption) -> None:
+    """Pipeline da noite: coleta + filtro + similaridade + nota do LLM."""
+    _run_steps(
+        "run",
+        lambda p, prof, pipe: _collect_steps(p, prof, pipe) + _rank_steps(p, prof, pipe, top)[1:],
+    )
+
+
+@app.command()
+def jobs(
+    limit: int = typer.Option(20, "--limit", "-n"),
+    min_score: int = typer.Option(0, "--min-score"),
+) -> None:
+    """Lista as vagas com nota, da melhor para a pior (até o painel existir)."""
+    paths = _paths()
+    pipeline = _pipeline(paths)
+    with pipeline.sessions() as s:
+        scores = [sc for sc in JobRepository(s).ranked(limit) if sc.llm_score >= min_score]
+        if not scores:
+            typer.echo("nenhuma vaga avaliada ainda; rode `night-shift run`")
+            return
+        for sc in scores:
+            j = sc.job
+            flags = f"  [!] {'; '.join(sc.red_flags)}" if sc.red_flags else ""
+            typer.echo(
+                f"{sc.llm_score:3d}  {j.title} — {j.company_name}"
+                f"  ({j.location or '?'}, {j.work_model or '?'})"
+            )
+            typer.echo(f"     {sc.rationale}{flags}")
+            typer.echo(f"     {j.url}\n")
+
+
+@companies_app.command("probe")
+def companies_probe(slugs: list[str]) -> None:
+    """Descobre em qual ATS (Greenhouse/Lever/Ashby) cada slug tem job board."""
+    http = PoliteClient(make_client(), min_interval=0.2)
+    for slug in slugs:
+        found = []
+        for ats, cls in ATS_SOURCES.items():
+            try:
+                n = sum(1 for _ in cls(http, CompanyConfig(name=slug, slug=slug)).fetch())
+            except SourceError:
+                continue
+            if n:
+                found.append(f"{ats} ({n} vagas)")
+        typer.echo(f"{slug}: {', '.join(found) or 'nada encontrado'}")
 
 
 if __name__ == "__main__":
