@@ -4,18 +4,21 @@ name: Seu Nome
 email: voce@example.com
 
 preferences:
-  levels: [pleno, junior]            # ordem = prioridade
+  levels: [pleno, junior]            # ordem = prioridade; vaga com nível fora daqui é cortada
   work_models: [remoto, hibrido, presencial]
   contracts: [clt, pj]
-  locations: [São Paulo]
+  locations: [São Paulo]             # cidades aceitas para presencial/híbrido
   salary:                             # bruto mensal em R$
     pleno:
       clt_min: 6000
       # pj_min: 9000                  # se omitido, usa clt_min x 1,45
     junior:
       clt_min: 3500
-  keywords: [python, fastapi, aws, llm, backend]
-  blocked_keywords: [estágio, php, .net]
+  # título precisa ter ao menos uma (omitir = padrão: backend, software, python, engineer...)
+  # title_keywords: [backend, python, software engineer]
+  keywords: [python, fastapi, django, flask, aws, llm, ia, ai]   # título ou descrição
+  blocked_keywords: [php, .net, java, golang, ruby, frontend, front-end, data analyst]
+  gupy_search_terms: [python, backend python, desenvolvedor python, fastapi, engenheiro de software python]
 
 automation:
   enabled: false                      # kill switch de qualquer submissão
@@ -23,8 +26,11 @@ automation:
   daily_auto_apply_limit: 10
 
 llm:
-  local_model: qwen3:8b
+  local_model: qwen3:8b               # ~5 GB de VRAM em Q4
+  embed_model: bge-m3                 # multilíngue (PT + EN)
   ollama_url: http://localhost:11434
+  think: false                        # raciocínio estendido do qwen3: lento e desnecessário aqui
+  rank_top_n: 30                      # vagas por noite que vão para o LLM
   claude_daily_letters: 10
   claude_daily_outreach: 5
 

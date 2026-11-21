@@ -1,11 +1,35 @@
 # Empresas-alvo: usadas na coleta (ATS) e no outreach. O arquivo real NÃO vai para o git.
 # ats: greenhouse | lever | ashby | gupy | outro
-# slug: identificador do job board (ex.: boards.greenhouse.io/<slug>)
+# slug: identificador do job board. Descubra com `night-shift companies probe <slug> ...`
+# Lista inicial validada em 21/11/2026 (job boards públicos com vagas no Brasil).
 
 companies:
-  - name: Exemplo Fintech
-    sector: fintech                   # fintech | fundo | banco_digital | ia
-    website: https://example.com
-    ats: greenhouse
-    slug: examplefintech
-    outreach_contact: null            # e-mail de quem recebe o cold e-mail
+  # --- bancos digitais / bancos
+  - {name: Nubank, sector: banco_digital, ats: ashby, slug: nubank}
+  - {name: Inter, sector: banco_digital, ats: greenhouse, slug: inter}
+  - {name: C6 Bank, sector: banco_digital, ats: greenhouse, slug: c6bank}
+  - {name: Neon, sector: banco_digital, ats: lever, slug: neon}
+  - {name: Agibank, sector: banco_digital, ats: greenhouse, slug: agibank}
+  - {name: Stark Bank, sector: banco_digital, ats: lever, slug: starkbank}
+
+  # --- investimentos
+  - {name: BTG Pactual, sector: fundo, ats: greenhouse, slug: btgpactual}
+  - {name: XP Inc., sector: fundo, ats: greenhouse, slug: xpinc}
+
+  # --- fintechs / pagamentos
+  - {name: Stone, sector: fintech, ats: greenhouse, slug: stone}
+  - {name: EBANX, sector: fintech, ats: greenhouse, slug: ebanx}
+  - {name: Zippi, sector: fintech, ats: lever, slug: zippi}
+  - {name: Swile, sector: fintech, ats: lever, slug: swile}
+
+  # --- tech com stack parecida
+  - {name: QuintoAndar, sector: tech, ats: greenhouse, slug: quintoandar}
+  - {name: VTEX, sector: tech, ats: greenhouse, slug: vtex}
+  - {name: Wellhub, sector: tech, ats: greenhouse, slug: gympass}
+  - {name: Jusbrasil, sector: ia, ats: greenhouse, slug: jusbrasil}
+
+  # Empresa só para outreach (sem job board público):
+  # - name: Exemplo IA
+  #   sector: ia
+  #   website: https://example.com
+  #   outreach_contact: pessoa@example.com

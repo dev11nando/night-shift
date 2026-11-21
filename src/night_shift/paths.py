@@ -43,6 +43,14 @@ class ProjectPaths:
     def profile_file(self) -> Path:
         return self.config_dir / "profile.yaml"
 
+    @property
+    def companies_file(self) -> Path:
+        return self.config_dir / "companies.yaml"
+
+    @property
+    def cv_file(self) -> Path:
+        return self.config_dir / "cv_master.yaml"
+
     def ensure_dirs(self) -> None:
         for d in (self.config_dir, self.data_dir, self.run_dir):
             d.mkdir(parents=True, exist_ok=True)

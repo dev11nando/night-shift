@@ -6,6 +6,7 @@ copia os exemplos que ainda não existem.
 
 import shutil
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
@@ -25,6 +26,9 @@ class ConfigError(Exception):
     pass
 
 
+# ---------------------------------------------------------------- profile.yaml
+
+
 class SalaryTarget(BaseModel):
     clt_min: int = Field(gt=0, description="Pretensão mínima CLT, bruto mensal (R$).")
     pj_min: int | None = Field(default=None, gt=0, description="Se vazio, usa clt_min x 1,45.")
@@ -40,8 +44,29 @@ class Preferences(BaseModel):
     contracts: list[Contract] = list(Contract)
     locations: list[str] = ["São Paulo"]
     salary: dict[Level, SalaryTarget] = {}
-    keywords: list[str] = []
-    blocked_keywords: list[str] = []
+    title_keywords: list[str] = Field(
+        default=[
+            "backend",
+            "back-end",
+            "back end",
+            "software",
+            "python",
+            "desenvolvedor",
+            "developer",
+            "engenheiro",
+            "engineer",
+            "engineering",
+            "programador",
+        ],
+        description="O título precisa conter ao menos uma.",
+    )
+    keywords: list[str] = Field(
+        default=[], description="Título ou descrição precisa conter ao menos uma (se houver)."
+    )
+    blocked_keywords: list[str] = Field(
+        default=[], description="Título com qualquer uma é cortado."
+    )
+    gupy_search_terms: list[str] = ["python", "backend python", "desenvolvedor python", "fastapi"]
 
 
 class AutomationConfig(BaseModel):
@@ -54,7 +79,13 @@ class AutomationConfig(BaseModel):
 
 class LLMConfig(BaseModel):
     local_model: str = "qwen3:8b"
+    embed_model: str = "bge-m3"
     ollama_url: str = "http://localhost:11434"
+    think: bool | None = Field(
+        default=False,
+        description="Raciocínio estendido do modelo local. None = não envia o parâmetro.",
+    )
+    rank_top_n: int = Field(default=30, ge=1, description="Quantas vagas vão para o LLM por noite.")
     claude_daily_letters: int = Field(default=10, ge=0)
     claude_daily_outreach: int = Field(default=5, ge=0)
 
@@ -73,16 +104,103 @@ class Profile(BaseModel):
     turn_off: TurnOffConfig = TurnOffConfig()
 
 
-def load_profile(path: Path) -> Profile:
+# -------------------------------------------------------------- companies.yaml
+
+Ats = Literal["greenhouse", "lever", "ashby", "gupy", "outro"]
+
+
+class CompanyConfig(BaseModel):
+    name: str
+    sector: str | None = None
+    website: str | None = None
+    ats: Ats | None = None
+    slug: str | None = None
+    outreach_contact: str | None = None
+
+
+class CompaniesFile(BaseModel):
+    companies: list[CompanyConfig] = []
+
+
+# -------------------------------------------------------------- cv_master.yaml
+
+
+class Bullet(BaseModel):
+    id: str
+    text: str
+    tags: list[str] = []
+
+
+class Experience(BaseModel):
+    company: str
+    role: str
+    period: str
+    bullets: list[Bullet] = []
+
+
+class Education(BaseModel):
+    school: str
+    course: str
+    period: str | None = None
+
+
+class Language(BaseModel):
+    name: str
+    level: str
+
+
+class CVMaster(BaseModel):
+    summary: str = ""
+    experiences: list[Experience] = []
+    education: list[Education] = []
+    courses: list[str] = []
+    skills: list[str] = []
+    languages: list[Language] = []
+
+    def as_text(self) -> str:
+        """Texto corrido usado em embeddings e prompts."""
+        lines = [self.summary.strip()]
+        for exp in self.experiences:
+            lines.append(f"\n{exp.role} — {exp.company} ({exp.period})")
+            lines += [f"- {b.text}" for b in exp.bullets]
+        if self.skills:
+            lines.append("\nHabilidades: " + ", ".join(self.skills))
+        for ed in self.education:
+            lines.append(f"Formação: {ed.course} — {ed.school}")
+        if self.courses:
+            lines.append("Cursos: " + ", ".join(self.courses))
+        if self.languages:
+            lines.append(
+                "Idiomas: " + ", ".join(f"{la.name} ({la.level})" for la in self.languages)
+            )
+        return "\n".join(lines).strip()
+
+
+# ---------------------------------------------------------------------- loaders
+
+
+def _load[M: BaseModel](path: Path, model: type[M]) -> M:
     if not path.exists():
         raise ConfigError(f"{path} não existe. Rode `night-shift init` e preencha o arquivo.")
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        return Profile.model_validate(data)
+        return model.model_validate(data)
     except yaml.YAMLError as e:
         raise ConfigError(f"YAML inválido em {path}: {e}") from e
     except ValidationError as e:
         raise ConfigError(f"Config inválida em {path}:\n{e}") from e
+
+
+def load_profile(path: Path) -> Profile:
+    return _load(path, Profile)
+
+
+def load_companies(path: Path) -> list[CompanyConfig]:
+    return _load(path, CompaniesFile).companies
+
+
+def load_cv(path: Path) -> CVMaster:
+    return _load(path, CVMaster)
 
 
 def bootstrap_config(config_dir: Path, examples_dir: Path = EXAMPLES_DIR) -> list[Path]:

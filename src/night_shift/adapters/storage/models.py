@@ -84,6 +84,7 @@ class Job(Base):
     salary_max: Mapped[int | None]
     url: Mapped[str] = mapped_column(String(1000))
     content_hash: Mapped[str] = mapped_column(String(64), index=True)
+    published_at: Mapped[datetime | None]
     collected_at: Mapped[datetime] = mapped_column(default=utcnow)
 
     company: Mapped[Company | None] = relationship(back_populates="jobs")
@@ -96,12 +97,15 @@ class Score(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), unique=True)
+    # Preenchido quando o filtro por regra cortou a vaga; aí não há similaridade nem nota.
+    filter_reason: Mapped[str | None] = mapped_column(String(200))
     embed_similarity: Mapped[float | None]
     llm_score: Mapped[int | None]
     rationale: Mapped[str | None] = mapped_column(Text)
     red_flags: Mapped[list[str]] = mapped_column(JSON, default=list)
     model: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    scored_at: Mapped[datetime | None]
 
     job: Mapped[Job] = relationship(back_populates="score")
 
