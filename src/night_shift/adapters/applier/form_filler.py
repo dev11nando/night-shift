@@ -93,14 +93,24 @@ _FIELDS_JS = """() => {
   });
 }"""
 
+# Obrigatório = atributo required/aria-required OU rótulo terminado em * / ✱: muitos
+# formulários em React (ex.: Greenhouse do BTG) só marcam com o asterisco visual.
 _UNANSWERED_JS = """() => {
+  const visible = el => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
+  const labelOf = el => {
+    if (el.labels && el.labels.length) return el.labels[0].innerText;
+    const by = el.getAttribute('aria-labelledby');
+    if (by) return by.split(' ').map(id => document.getElementById(id)?.innerText || '').join(' ');
+    return el.getAttribute('aria-label') || el.placeholder || el.name || el.id || '';
+  };
   const out = [];
   const seenRadio = new Set();
   for (const el of document.querySelectorAll('input, textarea, select')) {
-    const req = el.required || el.getAttribute('aria-required') === 'true';
-    if (!req || el.type === 'hidden') continue;
-    const label = ((el.labels && el.labels[0] && el.labels[0].innerText)
-      || el.getAttribute('aria-label') || el.name || el.id || '').replace(/\\s+/g, ' ').trim();
+    if (el.type === 'hidden' || (el.type !== 'file' && !visible(el))) continue;
+    const label = (labelOf(el) || '').replace(/\\s+/g, ' ').trim();
+    const req = el.required || el.getAttribute('aria-required') === 'true'
+      || /[*✱]\\s*$/.test(label);
+    if (!req) continue;
     if (el.type === 'radio') {
       if (seenRadio.has(el.name)) continue;
       seenRadio.add(el.name);

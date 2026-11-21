@@ -209,3 +209,16 @@ def test_wait_for_confirmation(browser):
 
     page.close()
     assert wait_for_confirmation(page, 5, poll_s=0.1) == "skipped"
+
+
+def test_required_by_asterisk_only_is_reported(browser, cand):
+    page = browser.new_page()
+    page.set_content(
+        '<input id="u" placeholder="Nome da Universidade *">'
+        '<input id="g" aria-label="Grau *">'
+        '<input id="o" placeholder="Orientação Sexual Afetiva - opcional">'
+        '<div style="display:none"><input id="h" placeholder="Escondido *"></div>'
+    )
+    report = fill_form(page, cand)
+    assert report.unanswered_required == ["Nome da Universidade *", "Grau *"]
+    page.close()
