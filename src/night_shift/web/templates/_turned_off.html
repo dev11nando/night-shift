@@ -1,0 +1,9 @@
+<section class="run status-stopped" id="system">
+  <div class="run-head">
+    <h2>night-shift desligado</h2>
+    <span class="status">off</span>
+  </div>
+  <ul class="off-report">{% for line in lines %}<li>{{ line }}</li>{% endfor %}</ul>
+  <p class="muted">O painel também foi encerrado. Para religar: <code>night-shift on</code> ou o atalho
+  "night-shift ON" na área de trabalho.</p>
+</section>
