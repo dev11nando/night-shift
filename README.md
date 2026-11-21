@@ -71,9 +71,15 @@ em inglês.
 
 ### Acompanhar uma rodada
 
-A página **Ao vivo** do painel mostra a execução em andamento: etapa, vaga atual, contadores,
-notas saindo, log e tempo restante do limite de LLM, atualizando a cada 2 s. Tem **Parar** e
-**Rodar agora** (dispara a própria tarefa agendada).
+No topo de todas as páginas do painel há **Buscar vagas** (dispara uma busca na hora, mesmo
+com a busca automática desligada) e **Desligar** (encerra tudo). A página **Ao vivo** mostra a
+execução em andamento: etapa, vaga atual, contadores, notas saindo, log e tempo restante do
+limite de LLM, atualizando a cada 2 s, com botão **Parar**.
+
+```powershell
+uv run night-shift schedule disable    # desliga só a busca automática diária
+uv run night-shift schedule enable     # religa
+```
 
 ### Aplicar (assistido)
 

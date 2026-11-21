@@ -10,6 +10,12 @@ inglês** para vagas em inglês e **PDFs do CV completo** para as aplicações m
 - **Parar** usa o mesmo `run/STOP` do `off`. **Rodar agora** dispara a própria tarefa agendada, então a execução roda fora do processo do painel; recusa se já houver execução ou se a tarefa estiver desligada.
 - O log só é lido se estiver dentro de `logs/`.
 
+### 1b. Botões no topo e busca sob demanda
+
+- **Buscar vagas** e **Desligar** no topo de todas as páginas (o Desligar saiu da página Hoje). No celular o topo quebra em duas linhas.
+- **Buscar vagas** dispara a tarefa `\NightShift\OnDemand`, criada sem horário (nunca roda sozinha) e independente da noturna: funciona com a busca automática desligada. Roda fora do processo do painel, então fechar o painel não mata a busca; o `off` mata. Depois de disparar, leva para a página Ao vivo, que espera a execução nova aparecer.
+- `night-shift schedule disable | enable`: liga e desliga só a busca automática diária.
+
 ### 2. CV em inglês
 
 - `config/cv_master.en.yaml` (opcional, gitignored) com os **mesmos IDs** de bullet do mestre. `translation_problems` aponta experiência, bullet faltando ou sobrando, ordem, período e quantidade de habilidades diferentes.
@@ -28,10 +34,11 @@ inglês** para vagas em inglês e **PDFs do CV completo** para as aplicações m
 ## Como foi testado
 
 - [x] `uv run ruff check .` e `uv run ruff format --check .`
-- [x] `uv run pytest`: 203 testes (10 novos). Tradução ok e cada tipo de divergência, datas e PDF em inglês, CV completo sem corte; vaga em inglês recebe CV `-en` e vaga em português o original; progresso gravado no meio da execução; página ao vivo sem execução, rodando (atualização, etapa ativa e concluída, item atual, contadores, tempo restante, log) e concluída (sem atualização, log fora de `logs/` não lido), Parar e Rodar agora com header HTMX obrigatório.
+- [x] `uv run pytest`: 207 testes (14 novos). Tradução ok e cada tipo de divergência, datas e PDF em inglês, CV completo sem corte; vaga em inglês recebe CV `-en` e vaga em português o original; progresso gravado no meio da execução; página ao vivo sem execução, rodando (atualização, etapa ativa e concluída, item atual, contadores, tempo restante, log) e concluída (sem atualização, log fora de `logs/` não lido), Parar e Rodar agora com header HTMX obrigatório.
 - [x] `night-shift cv check` no CV real: a tradução bate. `cv pdf` gerou os dois PDFs, conferidos página a página (17 habilidades em cada).
 - [x] Navegador: `/ao-vivo` com o banco real (execução antiga) e com uma **cópia** do banco simulando uma execução em andamento: trilha, relógio avançando sozinho (4min 19s → 4min 23s), contadores, log, **Parar** criando o STOP só na pasta da cópia; sem rolagem lateral no desktop e em 375 px.
-- [ ] **Rodar agora** de verdade não foi clicado: a primeira rodada real fica para a hora que você escolher.
+- [x] **Primeira rodada acompanhada** (execução #11, disparada pelo painel): 2 min, 9 notas, 1 CV + carta, 0 erros. Revelou que a página parava de atualizar logo depois de disparar (a execução nova demora alguns segundos para existir): corrigido, a página espera até 40 s. O log passou a mostrar a linha mais recente primeiro.
+- [x] Topo com os botões conferido no desktop e em 375 px, sem rolagem lateral. O botão Buscar vagas novo (tarefa sob demanda) não foi clicado: fica para você.
 
 ## O que não foi coberto / riscos
 
