@@ -96,7 +96,13 @@ class LLMConfig(BaseModel):
         description="Raciocínio estendido do modelo local. None = não envia o parâmetro.",
     )
     rank_top_n: int = Field(default=30, ge=1, description="Quantas vagas vão para o LLM por noite.")
-    claude_daily_letters: int = Field(default=10, ge=0)
+    documents_min_score: int = Field(
+        default=70, ge=0, le=100, description="Nota mínima para gerar CV ajustado e carta."
+    )
+    documents_model: str = Field(default="haiku", description="Modelo do CV ajustado e da carta.")
+    claude_daily_letters: int = Field(
+        default=10, ge=0, description="Máximo de vagas com CV+carta gerados por execução."
+    )
     claude_daily_outreach: int = Field(default=5, ge=0)
 
 
@@ -159,7 +165,16 @@ class Language(BaseModel):
     level: str
 
 
+class Contact(BaseModel):
+    phone: str | None = None
+    location: str | None = None
+    linkedin: str | None = None
+    github: str | None = None
+
+
 class CVMaster(BaseModel):
+    headline: str = Field(default="", description="Ex.: 'Backend Software Engineer'.")
+    contact: Contact = Contact()
     summary: str = ""
     experiences: list[Experience] = []
     education: list[Education] = []
