@@ -19,6 +19,7 @@ from night_shift.application.scoring import (
     job_text,
 )
 from night_shift.config import CompanyConfig, Profile
+from night_shift.domain.enrich import enrich
 from night_shift.domain.enums import RunStatus
 from night_shift.domain.filters import HardFilter
 from night_shift.ports import Embedder, JobSource, LLMProvider, LLMUnavailable, SourceError
@@ -59,7 +60,7 @@ class Pipeline:
         for source in sources:
             self._check_stop()
             try:
-                postings = list(source.fetch())
+                postings = [enrich(p) for p in source.fetch()]
             except SourceError as e:
                 self._error(f"{source.name}: {e}")
                 continue
