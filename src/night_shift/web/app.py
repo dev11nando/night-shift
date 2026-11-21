@@ -6,13 +6,14 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session, sessionmaker
 
 from night_shift import __version__
+from night_shift.adapters.storage.models import Job
 from night_shift.adapters.storage.review import ReviewRepository
 from night_shift.domain.enums import ApplicationStatus
 from night_shift.domain.lanes import Lane, manual_reason
@@ -64,7 +65,9 @@ templates.env.globals.update(duration=duration, version=__version__)
 # ---------------------------------------------------------------------- app
 
 
-def create_app(sessions: sessionmaker[Session], auto_threshold: int = 85) -> FastAPI:
+def create_app(
+    sessions: sessionmaker[Session], auto_threshold: int = 85, cv_dir: Path | None = None
+) -> FastAPI:
     """``auto_threshold``: nota mínima para uma vaga de fonte de baixo risco ir para a fila
     automática (``automation.auto_apply_min_score`` no profile.yaml)."""
     app = FastAPI(title="night-shift", docs_url=None, redoc_url=None)
@@ -157,6 +160,19 @@ def create_app(sessions: sessionmaker[Session], auto_threshold: int = 85) -> Fas
             buckets=repo.salary_buckets(),
             jobs=repo.jobs_with_salary(),
         )
+
+    @app.get("/jobs/{job_id}/cv")
+    def cv_pdf(job_id: int):
+        with sessions() as s:
+            job = s.get(Job, job_id)
+            path = job.application.cv_variant_path if job and job.application else None
+        if not path:
+            raise HTTPException(404, "esta vaga não tem CV ajustado")
+        pdf = Path(path).resolve()
+        # Só serve arquivo de dentro da pasta de CVs, mesmo que o banco tenha outro caminho.
+        if cv_dir is None or not pdf.is_relative_to(cv_dir.resolve()) or not pdf.exists():
+            raise HTTPException(404, "arquivo do CV não encontrado")
+        return FileResponse(pdf, media_type="application/pdf", filename=pdf.name)
 
     @app.get("/healthz")
     def healthz():
