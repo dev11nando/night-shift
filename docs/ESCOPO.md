@@ -61,7 +61,7 @@ Hexagonal (ports & adapters), igual ao que uso no trabalho. O domínio não conh
 | Porta | Responsabilidade | Adapters previstos |
 |---|---|---|
 | `JobSource` | Listar vagas novas | Greenhouse, Lever, Ashby, Gupy, Programathor, alertas do LinkedIn via Gmail |
-| `Embedder` | Vetorizar vaga e CV | sentence-transformers (`bge-m3`, multilíngue) na GPU |
+| `Embedder` | Vetorizar vaga e CV | Ollama (`bge-m3`, multilíngue) na GPU, sem precisar de torch |
 | `LLMProvider` | Nota final, respostas e textos | Ollama (local), Claude Code headless (`claude -p`) |
 | `Applier` | Submeter candidatura | Formulários Greenhouse/Lever/Ashby (Playwright); demais = fila |
 | `CVRenderer` | Gerar PDF do CV ajustado | HTML + WeasyPrint (ou Typst) |
@@ -76,7 +76,7 @@ Hexagonal (ports & adapters), igual ao que uso no trabalho. O domínio não conh
 |---|---|---|---|---|
 | Greenhouse / Lever / Ashby | API pública do job board da empresa | Formulário padrão | **Baixo** | Auto-apply se score ≥ limiar |
 | Programathor | Página/listagem pública | Simples, mas com login | **Médio** | Fila (auto depois, se estável) |
-| Gupy | Endpoint público do portal (validar) | Login + perguntas por vaga | **Médio** | Fila, com respostas pré-preenchidas |
+| Gupy | `__NEXT_DATA__` da busca do portal (a API antiga dá 404); ~12 vagas por termo | Login + perguntas por vaga | **Médio** | Fila, com respostas pré-preenchidas |
 | LinkedIn | E-mails de alerta no Gmail (não toca no site) | — | **Alto** | Só fila |
 | GeekHunter | — | Modelo invertido (empresa procura) | — | Lembrete para manter o perfil |
 
@@ -154,7 +154,7 @@ FastAPI + Jinja2 + HTMX, em `localhost`. Sem projeto separado de frontend.
 
 ## 9. Stack
 
-Python 3.12 · FastAPI · SQLAlchemy 2 · Pydantic 2 · Alembic · SQLite · Playwright · httpx · sentence-transformers · Ollama · Jinja2 + HTMX · pytest · ruff · uv (gerenciador) · Docker opcional (o painel roda direto; Ollama nativo no Windows aproveita melhor a GPU).
+Python 3.12 · FastAPI · SQLAlchemy 2 · Pydantic 2 · Alembic · SQLite · Playwright · httpx · Ollama (LLM + embeddings) · Jinja2 + HTMX · pytest · ruff · uv (gerenciador) · Docker opcional (o painel roda direto; Ollama nativo no Windows aproveita melhor a GPU).
 
 ### Estrutura proposta
 
@@ -233,6 +233,6 @@ No Windows, um processo filho órfão (Chromium do Playwright, Ollama segurando 
 
 - [ ] Qual modelo local exatamente (benchmark com 20 vagas rotuladas).
 - [ ] Limiar de score para auto-apply (começar alto, ~85).
-- [ ] Lista inicial de empresas (fintechs, fundos, bancos digitais, IA) com o ATS de cada uma.
-- [ ] Endpoint da Gupy: validar estabilidade e termos.
+- [x] Endpoint da Gupy: API antiga morreu; lemos a página de busca (`robots.txt` libera). Sem paginação.
+- [x] Lista inicial de empresas com ATS público: 16 em `config/companies.example.yaml`.
 - [ ] Idioma da carta e do CV para vagas em inglês (ter CV mestre bilíngue?).

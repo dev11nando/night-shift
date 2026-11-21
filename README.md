@@ -4,7 +4,7 @@ Sistema local que trabalha enquanto você dorme: coleta vagas, avalia o encaixe 
 usando embeddings e um LLM local, se candidata onde é seguro, deixa o resto numa fila para revisão
 e rascunha e-mails de apresentação para empresas-alvo.
 
-> Status: **Fase 0 (fundação)**. Veja o [escopo do MVP](docs/ESCOPO.md).
+> Status: **Fase 1 (coleta + ranking)**. Veja o [escopo do MVP](docs/ESCOPO.md).
 
 ## Ideia em uma linha
 
@@ -28,6 +28,25 @@ Esses arquivos ficam **fora do git**.
 > e aí o `night-shift off` não consegue garantir que nada fique rodando. O projeto já fixa
 > `python-preference = "only-managed"` e o `doctor` acusa se a venv estiver no Python errado.
 
+### LLM local
+
+Instale o [Ollama](https://ollama.com) e baixe os modelos (cabem numa GPU de 8 GB):
+
+```powershell
+ollama pull qwen3:8b   # nota das vagas
+ollama pull bge-m3     # embeddings (similaridade vaga x CV)
+```
+
+## Uso
+
+```powershell
+uv run night-shift run                 # coleta + filtro + similaridade + nota (pipeline da noite)
+uv run night-shift collect             # só coleta e filtro (não precisa de Ollama)
+uv run night-shift rank --top 10       # só similaridade + nota
+uv run night-shift jobs -n 20          # melhores vagas avaliadas
+uv run night-shift companies probe nubank stone   # descobre o ATS de uma empresa
+```
+
 ## Desenvolvimento
 
 ```powershell
@@ -38,5 +57,5 @@ uv run alembic revision --autogenerate -m "descricao"   # após mudar models.py
 
 ## Stack
 
-Python 3.13 · Typer · SQLAlchemy 2 · Alembic · Pydantic 2 · SQLite · pywin32 (Job Object) ·
-a seguir: FastAPI + HTMX, Playwright, Ollama, sentence-transformers
+Python 3.13 · Typer · httpx · SQLAlchemy 2 · Alembic · Pydantic 2 · SQLite · Ollama ·
+pywin32 (Job Object) · a seguir: FastAPI + HTMX, Playwright
