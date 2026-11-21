@@ -13,7 +13,7 @@
       {% if j.salary_min or j.salary_max %}<span class="tag money">{{ j.salary_min | brl }}{% if j.salary_max %} a {{ j.salary_max | brl }}{% endif %}</span>{% endif %}
       <span class="muted">{{ j.source }}</span>
     </p>
-    {% if not (app and app.status in ('applied_manual', 'discarded')) %}
+    {% if not (app and app.status in ('applied_manual', 'auto_applied', 'discarded')) %}
       {% if lane_of(sc) == 'auto' %}
         <p class="lane auto">Fila automática</p>
       {% else %}
@@ -23,6 +23,18 @@
     {% if sc.rationale %}<p class="rationale">{{ sc.rationale }}</p>{% endif %}
     {% if sc.red_flags %}
     <ul class="flags">{% for f in sc.red_flags %}<li>{{ f }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% set apply = (app.answers or {}).get('apply') if app else none %}
+    {% if apply %}
+    <p class="apply-info">
+      {% if app.status == 'auto_applied' %}<span class="ok">Aplicada com o night-shift</span>{% else %}
+      Formulário testado ({{ apply.status }}){% endif %}
+      · {{ apply.filled | length }} campo(s) preenchido(s){% if apply.resume_attached %}, CV anexado{% endif %}
+      {% if apply.unanswered_required %}· <span class="warn">{{ apply.unanswered_required | length }} obrigatório(s) para você</span>{% endif %}
+      {% if apply.captcha %}· captcha ({{ apply.captcha }}){% endif %}
+      {% if apply.filled_shot %}· <a href="/jobs/{{ j.id }}/shot/preenchido" target="_blank">print do preenchimento</a>{% endif %}
+      {% if apply.confirmed_shot %}· <a href="/jobs/{{ j.id }}/shot/confirmado" target="_blank">print da confirmação</a>{% endif %}
+    </p>
     {% endif %}
     {% if app and app.cover_letter %}
     <details class="letter">
@@ -41,7 +53,7 @@
   <div class="actions">
     <a class="btn" href="{{ j.url }}" target="_blank" rel="noopener">Abrir vaga</a>
     {% if app and app.cv_variant_path %}<a class="btn" href="/jobs/{{ j.id }}/cv" target="_blank" rel="noopener">CV ajustado</a>{% endif %}
-    {% if app and app.status in ('applied_manual', 'discarded') %}
+    {% if app and app.status in ('applied_manual', 'auto_applied', 'discarded') %}
       <button class="btn" hx-post="/jobs/{{ j.id }}/undo" hx-target="#job-{{ j.id }}" hx-swap="outerHTML">Voltar para fila</button>
     {% else %}
       <button class="btn primary" hx-post="/jobs/{{ j.id }}/done" hx-target="#job-{{ j.id }}" hx-swap="outerHTML" title="Já me candidatei">Done</button>

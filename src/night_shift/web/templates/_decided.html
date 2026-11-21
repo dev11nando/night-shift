@@ -1,5 +1,5 @@
 {% set j = sc.job %}
-{% set applied = j.application.status == 'applied_manual' %}
+{% set applied = j.application.status in ('applied_manual', 'auto_applied') %}
 <article class="card decided" id="job-{{ j.id }}">
   <p>
     <span class="{{ 'ok' if applied else 'muted' }}">{{ 'Aplicada' if applied else 'Descartada' }}:</span>

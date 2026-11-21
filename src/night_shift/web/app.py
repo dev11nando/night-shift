@@ -24,8 +24,8 @@ templates = Jinja2Templates(directory=HERE / "templates")
 # Abas da Fila: filas de pendentes (por lane) e decididas (por status).
 LANE_VIEWS = {"manual": Lane.MANUAL, "auto": Lane.AUTO}
 STATUS_VIEWS = {
-    "aplicadas": ApplicationStatus.APPLIED_MANUAL,
-    "descartadas": ApplicationStatus.DISCARDED,
+    "aplicadas": (ApplicationStatus.APPLIED_MANUAL, ApplicationStatus.AUTO_APPLIED),
+    "descartadas": (ApplicationStatus.DISCARDED,),
 }
 
 
@@ -69,6 +69,7 @@ def create_app(
     sessions: sessionmaker[Session],
     auto_threshold: int = 85,
     cv_dir: Path | None = None,
+    shots_dir: Path | None = None,
     schedule_status: Callable[[], str] | None = None,
     on_turn_off: Callable[[], list[str]] | None = None,
 ) -> FastAPI:
@@ -179,6 +180,22 @@ def create_app(
         if cv_dir is None or not pdf.is_relative_to(cv_dir.resolve()) or not pdf.exists():
             raise HTTPException(404, "arquivo do CV não encontrado")
         return FileResponse(pdf, media_type="application/pdf", filename=pdf.name)
+
+    @app.get("/jobs/{job_id}/shot/{kind}")
+    def apply_shot(job_id: int, kind: str):
+        key = {"preenchido": "filled_shot", "confirmado": "confirmed_shot"}.get(kind)
+        with sessions() as s:
+            job = s.get(Job, job_id)
+            apply = ((job.application.answers or {}) if job and job.application else {}).get(
+                "apply"
+            ) or {}
+        path = apply.get(key) if key else None
+        if not path:
+            raise HTTPException(404, "sem print")
+        png = Path(path).resolve()
+        if shots_dir is None or not png.is_relative_to(shots_dir.resolve()) or not png.exists():
+            raise HTTPException(404, "arquivo do print não encontrado")
+        return FileResponse(png, media_type="image/png")
 
     @app.post("/system/off", response_class=HTMLResponse)
     def system_off(request: Request):
