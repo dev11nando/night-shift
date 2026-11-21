@@ -44,6 +44,11 @@ class ProjectPaths:
         return self.config_dir / "profile.yaml"
 
     @property
+    def cv_output_dir(self) -> Path:
+        """PDFs de CV ajustado por vaga (gitignored)."""
+        return self.root / "output" / "cv"
+
+    @property
     def companies_file(self) -> Path:
         return self.config_dir / "companies.yaml"
 

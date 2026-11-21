@@ -1,6 +1,13 @@
 # CV mestre: TODOS os fatos verdadeiros, um bullet por realização.
 # O LLM só escolhe/reordena IDs, nunca escreve bullet novo. O arquivo real NÃO vai para o git.
 
+headline: Backend Software Engineer
+contact:
+  phone: (11) 90000-0000
+  location: São Paulo, SP
+  linkedin: linkedin.com/in/seu-perfil
+  github: github.com/seu-usuario
+
 summary: >
   Engenheiro de Software backend com Python...
 

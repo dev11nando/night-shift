@@ -8,10 +8,12 @@ import typer
 from night_shift import __version__
 from night_shift.adapters.llm.claude_cli import ClaudeCLI, find_executable
 from night_shift.adapters.llm.ollama import OllamaEmbedder, OllamaLLM
+from night_shift.adapters.render.cv_pdf import render_cv_pdf
 from night_shift.adapters.sources import build_sources
 from night_shift.adapters.sources.ats import ATS_SOURCES
 from night_shift.adapters.sources.http import PoliteClient, make_client
 from night_shift.adapters.storage import db
+from night_shift.adapters.storage.documents import DocumentsRepository
 from night_shift.adapters.storage.repository import JobRepository
 from night_shift.application.keywords import KeywordEmbedder
 from night_shift.application.pipeline import Pipeline
@@ -248,6 +250,32 @@ def _rank_steps(
     ]
 
 
+def _docs_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline, limit: int | None):
+    cv = _load_or_exit(load_cv, paths.cv_file)
+    llm_cfg = profile.llm
+    if llm_cfg.provider == "ollama":
+        llm = OllamaLLM(llm_cfg.ollama_url, llm_cfg.local_model, think=llm_cfg.think)
+    else:
+        llm = ClaudeCLI(llm_cfg.documents_model, executable=llm_cfg.claude_executable)
+    minutes = llm_cfg.time_budget_minutes
+
+    def render(tailored, out):
+        return render_cv_pdf(tailored, profile.name, profile.email, out)
+
+    return [
+        lambda: pipeline.documents(
+            llm,
+            profile,
+            cv,
+            render,
+            paths.cv_output_dir,
+            llm_cfg.documents_min_score,
+            limit or llm_cfg.claude_daily_letters,
+            budget_seconds=minutes * 60 if minutes else None,
+        )
+    ]
+
+
 TopOption = typer.Option(None, "--top", help="Quantas vagas mandar ao LLM (padrão: profile).")
 BudgetOption = typer.Option(
     None, "--time-budget", help="Minutos máximos da etapa de nota (padrão: profile, 120)."
@@ -276,12 +304,32 @@ def rank(
 
 
 @app.command()
+def docs(
+    limit: int | None = typer.Option(
+        None, "--limit", "-n", help="Máximo de vagas (padrão: llm.claude_daily_letters)."
+    ),
+    regenerate: bool = typer.Option(
+        False, "--regenerate", help="Apaga CV ajustado e carta das vagas na fila e gera de novo."
+    ),
+) -> None:
+    """Gera CV ajustado (PDF) e carta para as melhores vagas da fila."""
+    if regenerate:
+        with _pipeline(_paths()).sessions.begin() as s:
+            typer.echo(f"{DocumentsRepository(s).clear_documents()} vaga(s) para gerar de novo")
+    _run_steps("docs", lambda p, prof, pipe: _docs_steps(p, prof, pipe, limit))
+
+
+@app.command()
 def run(top: int | None = TopOption, time_budget: int | None = BudgetOption) -> None:
-    """Pipeline da noite: coleta + filtro + similaridade + nota do LLM."""
+    """Pipeline da noite: coleta, filtro, similaridade, nota do LLM, CV ajustado e carta.
+
+    O limite de tempo vale para as etapas de LLM juntas (nota + documentos)."""
     _run_steps(
         "run",
         lambda p, prof, pipe: (
-            _collect_steps(p, prof, pipe) + _rank_steps(p, prof, pipe, top, time_budget)[1:]
+            _collect_steps(p, prof, pipe)
+            + _rank_steps(p, prof, pipe, top, time_budget)[1:]
+            + _docs_steps(p, prof, pipe, None)
         ),
     )
 
@@ -334,7 +382,7 @@ def serve(
         threshold = load_profile(paths.profile_file).automation.auto_apply_min_score
     except ConfigError:
         threshold = AutomationConfig().auto_apply_min_score
-    web_app = create_app(pipeline.sessions, auto_threshold=threshold)
+    web_app = create_app(pipeline.sessions, auto_threshold=threshold, cv_dir=paths.cv_output_dir)
     uvicorn.run(web_app, host="127.0.0.1", port=port, log_level="warning")
 
 

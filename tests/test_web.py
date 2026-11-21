@@ -182,3 +182,33 @@ def test_mercado_shows_median_by_level_and_contract(client, seeded):
 def test_static_and_health(client):
     assert client.get("/static/style.css").status_code == 200
     assert client.get("/healthz").json()["ok"] is True
+
+
+def test_card_shows_letter_and_serves_cv_only_from_cv_dir(sessions, seeded, tmp_path):
+    cv_dir = tmp_path / "output" / "cv"
+    cv_dir.mkdir(parents=True)
+    pdf = cv_dir / "1-fintech-x.pdf"
+    pdf.write_bytes(b"%PDF-1.4 teste")
+    outside = tmp_path / "segredo.pdf"
+    outside.write_bytes(b"%PDF-1.4 fora")
+    with sessions.begin() as s:
+        s.add(
+            Application(
+                job_id=seeded["top"],
+                risk=RiskLevel.LOW,
+                cv_variant_path=str(pdf),
+                cover_letter="Olá, time.\n\nMarcos",
+                answers={"letter_subject": "Candidatura: Backend"},
+            )
+        )
+        s.add(Application(job_id=seeded["mid"], risk=RiskLevel.LOW, cv_variant_path=str(outside)))
+
+    client = TestClient(create_app(sessions, cv_dir=cv_dir))
+    html = client.get("/fila?view=auto").text
+    assert "Carta de apresentação" in html and "Assunto: Candidatura: Backend" in html
+    assert f'href="/jobs/{seeded["top"]}/cv"' in html
+
+    resp = client.get(f"/jobs/{seeded['top']}/cv")
+    assert resp.status_code == 200 and resp.content.startswith(b"%PDF")
+    assert client.get(f"/jobs/{seeded['mid']}/cv").status_code == 404, "fora da pasta de CVs"
+    assert client.get(f"/jobs/{seeded['low']}/cv").status_code == 404, "sem CV"

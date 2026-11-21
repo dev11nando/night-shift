@@ -24,6 +24,15 @@
     {% if sc.red_flags %}
     <ul class="flags">{% for f in sc.red_flags %}<li>{{ f }}</li>{% endfor %}</ul>
     {% endif %}
+    {% if app and app.cover_letter %}
+    <details class="letter">
+      <summary>Carta de apresentação</summary>
+      {% set subject = (app.answers or {}).get('letter_subject') %}
+      {% if subject %}<p class="muted">Assunto: {{ subject }}</p>{% endif %}
+      <div class="letter-body" id="letter-{{ j.id }}">{{ app.cover_letter }}</div>
+      <button class="btn ghost" type="button" onclick="navigator.clipboard.writeText(document.getElementById('letter-{{ j.id }}').innerText); this.textContent='Copiada'">Copiar carta</button>
+    </details>
+    {% endif %}
     <details>
       <summary>Descrição</summary>
       <div class="description">{{ j.description[:3000] }}{% if j.description | length > 3000 %}…{% endif %}</div>
@@ -31,6 +40,7 @@
   </div>
   <div class="actions">
     <a class="btn" href="{{ j.url }}" target="_blank" rel="noopener">Abrir vaga</a>
+    {% if app and app.cv_variant_path %}<a class="btn" href="/jobs/{{ j.id }}/cv" target="_blank" rel="noopener">CV ajustado</a>{% endif %}
     {% if app and app.status in ('applied_manual', 'discarded') %}
       <button class="btn" hx-post="/jobs/{{ j.id }}/undo" hx-target="#job-{{ j.id }}" hx-swap="outerHTML">Voltar para fila</button>
     {% else %}

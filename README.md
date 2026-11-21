@@ -1,10 +1,11 @@
 # night-shift
 
 Sistema local que trabalha enquanto você dorme: coleta vagas, avalia o encaixe com seu perfil
-usando embeddings e um LLM local, se candidata onde é seguro, deixa o resto numa fila para revisão
-e rascunha e-mails de apresentação para empresas-alvo.
+usando um LLM (Claude Haiku pela sua assinatura, ou Ollama local), prepara CV ajustado e carta
+para as melhores, separa o que dá para aplicar sozinho do que precisa de você e rascunha e-mails
+de apresentação para empresas-alvo.
 
-> Status: **Fase 2 (painel)**. Veja o [escopo do MVP](docs/ESCOPO.md).
+> Status: **Fase 3 (CV ajustado e carta)**. Veja o [escopo do MVP](docs/ESCOPO.md).
 
 ## Ideia em uma linha
 
@@ -49,6 +50,8 @@ uv run night-shift run --time-budget 120   # nota por no máximo 120 min; o rest
 uv run night-shift collect             # só coleta e filtro (não precisa de LLM)
 uv run night-shift rank --top 10       # só similaridade + nota
 uv run night-shift rank --rescore      # reavalia vagas sem decisão (ex.: depois de mudar o prompt)
+uv run night-shift docs -n 5          # CV ajustado (output/cv/*.pdf) + carta para as melhores
+uv run night-shift docs --regenerate   # gera de novo para as vagas da fila (ex.: mudou o CV)
 uv run night-shift serve --open        # painel em http://127.0.0.1:8765 (Hoje, Fila, Mercado)
 uv run night-shift jobs -n 20          # melhores vagas avaliadas, no terminal
 uv run night-shift db enrich           # extrai nível/contrato/salário de vagas antigas
@@ -65,5 +68,5 @@ uv run alembic revision --autogenerate -m "descricao"   # após mudar models.py
 
 ## Stack
 
-Python 3.13 · Typer · httpx · SQLAlchemy 2 · Alembic · Pydantic 2 · SQLite · Ollama ·
+Python 3.13 · Typer · httpx · SQLAlchemy 2 · Alembic · Pydantic 2 · SQLite · Claude Code CLI · fpdf2 ·
 FastAPI + Jinja2 + HTMX · pywin32 (Job Object) · a seguir: Playwright
