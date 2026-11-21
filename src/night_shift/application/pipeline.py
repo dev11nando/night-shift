@@ -251,7 +251,10 @@ class Pipeline:
         self.errors.clear()
         self.deadline = None
         with self.sessions.begin() as s:
-            run_id = JobRepository(s).start_run().id
+            repo = JobRepository(s)
+            if repo.mark_interrupted_runs():
+                self.log("execução anterior foi interrompida; continuando de onde parou")
+            run_id = repo.start_run().id
         status = RunStatus.SUCCESS
         try:
             for step in steps:

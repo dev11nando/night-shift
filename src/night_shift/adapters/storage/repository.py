@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from night_shift.adapters.storage.models import Application, Company, Job, Run, Score, utcnow
 from night_shift.config import CompanyConfig
 from night_shift.domain.enrich import enrich
-from night_shift.domain.enums import ApplicationStatus
+from night_shift.domain.enums import ApplicationStatus, RunStatus
 from night_shift.domain.job import JobPosting
 
 
@@ -148,6 +148,17 @@ class JobRepository:
         ).all()
 
     # --------------------------------------------------------------------- runs
+
+    def mark_interrupted_runs(self) -> int:
+        """Execuções que ficaram como ``running`` foram mortas no meio (PC desligado,
+        processo encerrado). Como só um pipeline roda por vez, ao começar outro elas viram
+        ``failed``. Os dados que já gravaram continuam valendo: as etapas são idempotentes,
+        então a nova execução segue de onde aquela parou."""
+        stale = self.s.scalars(select(Run).where(Run.status == RunStatus.RUNNING)).all()
+        for run in stale:
+            run.status = RunStatus.FAILED
+            run.errors = [*(run.errors or []), "execução interrompida (processo encerrado)"]
+        return len(stale)
 
     def start_run(self) -> Run:
         run = Run(stats={}, errors=[])
