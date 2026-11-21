@@ -166,6 +166,24 @@ def test_llm_unavailable_fails_run_but_keeps_collected_jobs(pipeline):
     assert scores(pipeline)["1"][1] is not None, "similaridade já gravada continua lá"
 
 
+def test_time_budget_defers_remaining_jobs(pipeline):
+    ticks = iter([0, 10, 70, 130])  # início; antes da 1ª vaga; antes da 2ª; antes da 3ª
+    pipeline.clock = lambda: next(ticks)
+    llm = FakeLLM()
+    pipeline.run(
+        [
+            lambda: pipeline.collect([FakeSource("a", [GOOD, OK, OFF])], []),
+            lambda: pipeline.screen(HardFilter(PROFILE.preferences)),
+            lambda: pipeline.embed_rank(BagOfWordsEmbedder(), CV_TEXT),
+            lambda: pipeline.llm_score(llm, PROFILE, CV_TEXT, top_n=10, budget_seconds=100),
+        ]
+    )
+
+    assert len(llm.calls) == 2
+    assert pipeline.stats["llm_deferred"] == 1
+    assert pipeline.stats["llm_scored"] == 2
+
+
 def test_stop_flag_halts_between_steps(pipeline):
     pipeline.stop.request()
     run = full_run(pipeline, [FakeSource("a", [GOOD])], FakeLLM())

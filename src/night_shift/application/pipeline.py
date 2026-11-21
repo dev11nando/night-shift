@@ -4,6 +4,7 @@ Cada etapa é idempotente (só processa o que ainda não foi processado), confer
 de parada entre unidades de trabalho e grava contagens no ``Run``.
 """
 
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
@@ -37,6 +38,7 @@ class Pipeline:
     sessions: sessionmaker[Session]
     stop: StopFlag
     log: Callable[[str], None] = print
+    clock: Callable[[], float] = time.monotonic
     stats: dict[str, int] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
@@ -101,12 +103,28 @@ class Pipeline:
             self._count("embedded", len(batch))
         self.log(f"  {len(pending_ids)} vagas comparadas com o CV")
 
-    def llm_score(self, llm: LLMProvider, profile: Profile, cv_text: str, top_n: int) -> None:
-        self.log(f"nota do LLM ({llm.model}, top {top_n})")
+    def llm_score(
+        self,
+        llm: LLMProvider,
+        profile: Profile,
+        cv_text: str,
+        top_n: int,
+        budget_seconds: float | None = None,
+    ) -> None:
+        """Dá nota às top N. Com ``budget_seconds``, para de pegar vaga nova quando o tempo
+        acaba; as restantes ficam para a próxima execução."""
+        budget = f", limite {budget_seconds / 60:.0f} min" if budget_seconds else ""
+        self.log(f"nota do LLM ({llm.model}, top {top_n}{budget})")
+        deadline = self.clock() + budget_seconds if budget_seconds else None
         with self.sessions() as s:
             ids = [sc.id for sc in JobRepository(s).top_unscored(top_n)]
         for n, sid in enumerate(ids, 1):
             self._check_stop()
+            if deadline is not None and self.clock() >= deadline:
+                left = len(ids) - n + 1
+                self._count("llm_deferred", left)
+                self.log(f"  tempo esgotado: {left} vaga(s) ficam para a próxima execução")
+                break
             with self.sessions.begin() as s:
                 sc = s.get_one(Score, sid)
                 job = to_posting(sc.job)
