@@ -1,34 +1,114 @@
 # Empresas-alvo: usadas na coleta (ATS) e no outreach. O arquivo real NÃO vai para o git.
 # ats: greenhouse | lever | ashby | gupy | outro
 # slug: identificador do job board. Descubra com `night-shift companies probe <slug> ...`
-# Lista inicial validada em 21/11/2026 (job boards públicos com vagas no Brasil).
+# website: usado por `night-shift companies discover` para achar o e-mail PÚBLICO de RH
+#          (páginas de carreiras/contato do próprio site). outreach_contact manual tem
+#          prioridade sobre o descoberto.
+# Lista de 21/11/2026. Os job boards foram validados; os sites, não: o discover avisa
+# quando algum não abre.
 
 companies:
   # --- bancos digitais / bancos
-  - {name: Nubank, sector: banco_digital, ats: ashby, slug: nubank}
-  - {name: Inter, sector: banco_digital, ats: greenhouse, slug: inter}
-  - {name: C6 Bank, sector: banco_digital, ats: greenhouse, slug: c6bank}
-  - {name: Neon, sector: banco_digital, ats: lever, slug: neon}
-  - {name: Agibank, sector: banco_digital, ats: greenhouse, slug: agibank}
-  - {name: Stark Bank, sector: banco_digital, ats: lever, slug: starkbank}
+  - {name: Nubank, sector: banco_digital, website: https://nubank.com.br, ats: ashby, slug: nubank}
+  - {name: Inter, sector: banco_digital, website: https://inter.co, ats: greenhouse, slug: inter}
+  - {name: C6 Bank, sector: banco_digital, website: https://www.c6bank.com.br, ats: greenhouse, slug: c6bank}
+  - {name: Neon, sector: banco_digital, website: https://neon.com.br, ats: lever, slug: neon}
+  - {name: Agibank, sector: banco_digital, website: https://www.agibank.com.br, ats: greenhouse, slug: agibank}
+  - {name: Stark Bank, sector: banco_digital, website: https://starkbank.com, ats: lever, slug: starkbank}
+  - {name: PicPay, sector: banco_digital, website: https://picpay.com}
+  - {name: Banco Pan, sector: banco_digital, website: https://www.bancopan.com.br}
+  - {name: Banco BS2, sector: banco_digital, website: https://www.bs2.com}
+  - {name: Banco Original, sector: banco_digital, website: https://www.original.com.br}
+  - {name: Will Bank, sector: banco_digital, website: https://www.willbank.com.br}
+  - {name: Banco BV, sector: banco_digital, website: https://www.bv.com.br}
+  - {name: Banco Daycoval, sector: banco_digital, website: https://www.daycoval.com.br}
+  - {name: Cora, sector: banco_digital, website: https://www.cora.com.br}
+  - {name: Mercado Pago, sector: banco_digital, website: https://www.mercadopago.com.br}
+  - {name: PagBank, sector: banco_digital, website: https://pagbank.com.br}
+  - {name: Sicredi, sector: banco_digital, website: https://www.sicredi.com.br}
 
-  # --- investimentos
-  - {name: BTG Pactual, sector: fundo, ats: greenhouse, slug: btgpactual}
-  - {name: XP Inc., sector: fundo, ats: greenhouse, slug: xpinc}
+  # --- investimentos / gestoras / fundos
+  - {name: BTG Pactual, sector: fundo, website: https://www.btgpactual.com, ats: greenhouse, slug: btgpactual}
+  - {name: XP Inc., sector: fundo, website: https://www.xpi.com.br, ats: greenhouse, slug: xpinc}
+  - {name: Warren Investimentos, sector: fundo, website: https://warren.com.br}
+  - {name: Órama, sector: fundo, website: https://www.orama.com.br}
+  - {name: Genial Investimentos, sector: fundo, website: https://www.genialinvestimentos.com.br}
+  - {name: Toro Investimentos, sector: fundo, website: https://www.toroinvestimentos.com.br}
+  - {name: Vórtx, sector: fundo, website: https://www.vortx.com.br}
+  - {name: Kanastra, sector: fundo, website: https://www.kanastra.com.br}
+  - {name: Kinea, sector: fundo, website: https://www.kinea.com.br}
+  - {name: Verde Asset, sector: fundo, website: https://www.verdeasset.com.br}
+  - {name: SPX Capital, sector: fundo, website: https://www.spxcapital.com}
+  - {name: Ibiuna Investimentos, sector: fundo, website: https://www.ibiuna.com.br}
+  - {name: Vinci Partners, sector: fundo, website: https://www.vincipartners.com}
+  - {name: Patria Investimentos, sector: fundo, website: https://www.patria.com}
+  - {name: JGP, sector: fundo, website: https://www.jgp.com.br}
+  - {name: Galapagos Capital, sector: fundo, website: https://www.galapagoscapital.com}
+  - {name: Avenue, sector: fundo, website: https://avenue.us}
+  - {name: Nomad, sector: fundo, website: https://www.nomadglobal.com}
+  - {name: Mercado Bitcoin, sector: fundo, website: https://www.mercadobitcoin.com.br}
+  - {name: Foxbit, sector: fundo, website: https://foxbit.com.br}
+  - {name: Liqi, sector: fundo, website: https://www.liqi.com.br}
 
-  # --- fintechs / pagamentos
-  - {name: Stone, sector: fintech, ats: greenhouse, slug: stone}
-  - {name: EBANX, sector: fintech, ats: greenhouse, slug: ebanx}
-  - {name: Zippi, sector: fintech, ats: lever, slug: zippi}
-  - {name: Swile, sector: fintech, ats: lever, slug: swile}
+  # --- fintechs / pagamentos / crédito
+  - {name: Stone, sector: fintech, website: https://www.stone.com.br, ats: greenhouse, slug: stone}
+  - {name: EBANX, sector: fintech, website: https://www.ebanx.com, ats: greenhouse, slug: ebanx}
+  - {name: Zippi, sector: fintech, website: https://www.zippi.com.br, ats: lever, slug: zippi}
+  - {name: Swile, sector: fintech, website: https://www.swile.com.br, ats: lever, slug: swile}
+  - {name: Creditas, sector: fintech, website: https://www.creditas.com}
+  - {name: CloudWalk, sector: fintech, website: https://www.cloudwalk.io}
+  - {name: Pismo, sector: fintech, website: https://www.pismo.io}
+  - {name: Dock, sector: fintech, website: https://www.dock.tech}
+  - {name: Celcoin, sector: fintech, website: https://www.celcoin.com.br}
+  - {name: QI Tech, sector: fintech, website: https://www.qitech.com.br}
+  - {name: Asaas, sector: fintech, website: https://www.asaas.com}
+  - {name: iugu, sector: fintech, website: https://www.iugu.com}
+  - {name: Pagar.me, sector: fintech, website: https://pagar.me}
+  - {name: Transfeera, sector: fintech, website: https://transfeera.com}
+  - {name: Zoop, sector: fintech, website: https://www.zoop.com.br}
+  - {name: Vindi, sector: fintech, website: https://vindi.com.br}
+  - {name: Conta Simples, sector: fintech, website: https://www.contasimples.com}
+  - {name: Flash, sector: fintech, website: https://flashapp.com.br}
+  - {name: Caju, sector: fintech, website: https://www.caju.com.br}
+  - {name: Open Co, sector: fintech, website: https://www.openco.com}
+  - {name: BizCapital, sector: fintech, website: https://bizcapital.com.br}
+  - {name: Provi, sector: fintech, website: https://provi.com.br}
+  - {name: Méliuz, sector: fintech, website: https://www.meliuz.com.br}
+  - {name: Contabilizei, sector: fintech, website: https://www.contabilizei.com.br}
+  - {name: Conta Azul, sector: fintech, website: https://contaazul.com}
+  - {name: Omie, sector: fintech, website: https://www.omie.com.br}
+
+  # --- dados, crédito e identidade (perto do que você fez na IORQ)
+  - {name: Neurotech, sector: ia, website: https://www.neurotech.com.br}
+  - {name: Quod, sector: ia, website: https://www.quod.com.br}
+  - {name: idwall, sector: ia, website: https://idwall.co}
+  - {name: unico, sector: ia, website: https://unico.io}
+  - {name: CAF, sector: ia, website: https://www.caf.io}
+  - {name: Neoway, sector: ia, website: https://www.neoway.com.br}
+  - {name: BigDataCorp, sector: ia, website: https://bigdatacorp.com.br}
+  - {name: Belvo, sector: ia, website: https://belvo.com}
+  - {name: Pluggy, sector: ia, website: https://www.pluggy.ai}
+  - {name: Klavi, sector: ia, website: https://www.klavi.ai}
+
+  # --- IA
+  - {name: Jusbrasil, sector: ia, website: https://www.jusbrasil.com.br, ats: greenhouse, slug: jusbrasil}
+  - {name: Maritaca AI, sector: ia, website: https://www.maritaca.ai}
+  - {name: NeuralMind, sector: ia, website: https://neuralmind.ai}
+  - {name: Blip, sector: ia, website: https://www.blip.ai}
+  - {name: Zenvia, sector: ia, website: https://www.zenvia.com}
+  - {name: Semantix, sector: ia, website: https://www.semantix.ai}
+  - {name: Birdie, sector: ia, website: https://www.birdie.ai}
+  - {name: BotCity, sector: ia, website: https://www.botcity.dev}
+  - {name: Tractian, sector: ia, website: https://tractian.com}
 
   # --- tech com stack parecida
-  - {name: QuintoAndar, sector: tech, ats: greenhouse, slug: quintoandar}
-  - {name: VTEX, sector: tech, ats: greenhouse, slug: vtex}
-  - {name: Wellhub, sector: tech, ats: greenhouse, slug: gympass}
-  - {name: Jusbrasil, sector: ia, ats: greenhouse, slug: jusbrasil}
+  - {name: QuintoAndar, sector: tech, website: https://www.quintoandar.com.br, ats: greenhouse, slug: quintoandar}
+  - {name: VTEX, sector: tech, website: https://vtex.com, ats: greenhouse, slug: vtex}
+  - {name: Wellhub, sector: tech, website: https://wellhub.com, ats: greenhouse, slug: gympass}
+  - {name: Loft, sector: tech, website: https://loft.com.br}
+  - {name: Hotmart, sector: tech, website: https://hotmart.com}
 
-  # Empresa só para outreach (sem job board público):
+  # Contato que você mesmo encontrou (tem prioridade sobre o descoberto):
   # - name: Exemplo IA
   #   sector: ia
   #   website: https://example.com
