@@ -205,3 +205,29 @@ def test_interrupted_run_is_marked_and_next_run_continues(pipeline):
         first = s.scalars(select(Run).order_by(Run.id)).first()
         assert first.status is RunStatus.FAILED
         assert "interrompida" in first.errors[-1]
+
+
+def test_progress_is_written_while_running(pipeline):
+    seen = {}
+
+    def peek():
+        with pipeline.sessions() as s:
+            run = s.get(Run, pipeline.run_id)
+            seen.update(stage=run.stage, stats=dict(run.stats), log=run.log_path)
+
+    pipeline.log_path = "logs/x.log"
+    run = pipeline.run(
+        [
+            lambda: pipeline.collect([FakeSource("a", [GOOD, OK])], []),
+            lambda: pipeline.screen(HardFilter(PROFILE.preferences)),
+            peek,
+            lambda: pipeline.llm_score(FakeLLM(), PROFILE, CV_TEXT, 5, budget_seconds=600),
+        ]
+    )
+    assert seen["stage"] == "filtro" and seen["stats"]["collected"] == 2
+    assert seen["log"] == "logs/x.log"
+    with pipeline.sessions() as s:
+        final = s.get(Run, run.id)
+        assert final.stage == "nota" and final.current_item is None
+        assert final.budget_ends_at is not None
+    assert pipeline.run_id is None

@@ -9,6 +9,7 @@ import re
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy.orm import Session, sessionmaker
@@ -63,6 +64,10 @@ class Pipeline:
     errors: list[str] = field(default_factory=list)
     # Prazo compartilhado pelas etapas que usam LLM numa mesma execução.
     deadline: float | None = None
+    # Progresso ao vivo: gravado na linha do Run a cada unidade de trabalho.
+    run_id: int | None = None
+    log_path: str | None = None
+    budget_ends_at: datetime | None = None
 
     def _check_stop(self) -> None:
         if self.stop.is_set():
@@ -79,6 +84,21 @@ class Pipeline:
         """Começa a contar o tempo das etapas de LLM (só na primeira chamada da execução)."""
         if seconds and self.deadline is None:
             self.deadline = self.clock() + seconds
+            self.budget_ends_at = utcnow() + timedelta(seconds=seconds)
+
+    def _progress(self, stage: str | None = None, item: str | None = None) -> None:
+        """Atualiza a linha do Run para a página /ao-vivo. Sem Run (testes), não faz nada."""
+        if self.run_id is None:
+            return
+        with self.sessions.begin() as s:
+            run = s.get(Run, self.run_id)
+            if run is None:
+                return
+            if stage is not None:
+                run.stage = stage
+            run.current_item = item[:300] if item else None
+            run.stats, run.errors = dict(self.stats), list(self.errors)
+            run.budget_ends_at = self.budget_ends_at
 
     def _time_up(self, remaining: int, key: str) -> bool:
         if self.deadline is not None and self.clock() >= self.deadline:
@@ -95,6 +115,7 @@ class Pipeline:
             company_ids = JobRepository(s).sync_companies(companies)
         for source in sources:
             self._check_stop()
+            self._progress("coleta", source.name)
             try:
                 postings = [enrich(p) for p in source.fetch()]
             except SourceError as e:
@@ -109,6 +130,7 @@ class Pipeline:
 
     def screen(self, hard_filter: HardFilter) -> None:
         self.log("filtro por regra")
+        self._progress("filtro")
         with self.sessions.begin() as s:
             repo = JobRepository(s)
             for job in repo.unscreened():
@@ -122,6 +144,7 @@ class Pipeline:
 
     def embed_rank(self, embedder: Embedder, cv_text: str) -> None:
         self.log(f"similaridade ({embedder.model})")
+        self._progress("similaridade")
         with self.sessions() as s:
             pending_ids = [sc.id for sc in JobRepository(s).needing_similarity()]
         if not pending_ids:
@@ -150,12 +173,16 @@ class Pipeline:
         budget = f", limite {budget_seconds / 60:.0f} min" if budget_seconds else ""
         self.log(f"nota do LLM ({llm.model}, top {top_n}{budget})")
         self.start_budget(budget_seconds)
+        self._progress("nota")
         with self.sessions() as s:
             ids = [sc.id for sc in JobRepository(s).top_unscored(top_n)]
         for n, sid in enumerate(ids, 1):
             self._check_stop()
             if self._time_up(len(ids) - n + 1, "llm_deferred"):
                 break
+            with self.sessions() as s:
+                peek = to_posting(s.get_one(Score, sid).job)
+            self._progress("nota", f"[{n}/{len(ids)}] {peek.title} — {peek.company_name}")
             with self.sessions.begin() as s:
                 sc = s.get_one(Score, sid)
                 job = to_posting(sc.job)
@@ -179,19 +206,23 @@ class Pipeline:
         llm: LLMProvider,
         profile: Profile,
         cv: CVMaster,
-        render: Callable[[TailoredCV, Path], Path],
+        render: Callable[[TailoredCV, Path, str], Path],
         out_dir: Path,
         min_score: int,
         limit: int,
         budget_seconds: float | None = None,
+        cv_en: CVMaster | None = None,
     ) -> None:
         """CV ajustado (PDF) e carta para as melhores vagas da fila que ainda não têm.
+
+        Vaga em inglês usa ``cv_en`` (mesmos IDs do mestre) quando existe; senão o mestre.
 
         Seleção do CV rejeitada pelo validador: tenta de novo uma vez com o motivo, depois
         usa o CV mestre sem ajuste. Carta rejeitada: tenta de novo uma vez, depois fica sem.
         """
         self.log(f"CV ajustado + carta ({llm.model}, nota >= {min_score}, até {limit})")
         self.start_budget(budget_seconds)
+        self._progress("documentos")
         with self.sessions() as s:
             ids = [sc.job_id for sc in DocumentsRepository(s).needing_documents(min_score, limit)]
         for n, job_id in enumerate(ids, 1):
@@ -200,10 +231,14 @@ class Pipeline:
                 break
             with self.sessions() as s:
                 job = to_posting(s.get_one(Job, job_id))
+            self._progress("documentos", f"[{n}/{len(ids)}] {job.title} — {job.company_name}")
 
-            tailored = self._tailor(llm, cv, job)
-            pdf = render(tailored, out_dir / f"{job_id}-{slugify(job.company_name)}.pdf")
-            letter = self._letter(llm, profile, cv, job)
+            lang = job_language(job)
+            base, doc_lang = (cv_en, "en") if lang == "en" and cv_en else (cv, "pt")
+            tailored = self._tailor(llm, base, job, doc_lang)
+            name = f"{job_id}-{slugify(job.company_name)}{'-en' if doc_lang == 'en' else ''}.pdf"
+            pdf = render(tailored, out_dir / name, doc_lang)
+            letter = self._letter(llm, profile, base, job)
 
             with self.sessions.begin() as s:
                 DocumentsRepository(s).save_documents(job_id, pdf, letter)
@@ -225,9 +260,12 @@ class Pipeline:
         self._error(f"{what} em '{job.title}': {last}")
         return None
 
-    def _tailor(self, llm: LLMProvider, cv: CVMaster, job: JobPosting) -> TailoredCV:
+    def _tailor(
+        self, llm: LLMProvider, cv: CVMaster, job: JobPosting, lang: str = "pt"
+    ) -> TailoredCV:
         def attempt(feedback: str) -> TailoredCV:
-            sel = llm.complete_json(TAILOR_SYSTEM, tailor_prompt(cv, job) + feedback, CVSelection)
+            prompt = tailor_prompt(cv, job, lang) + feedback
+            sel = llm.complete_json(TAILOR_SYSTEM, prompt, CVSelection)
             return apply_selection(cv, sel)
 
         return self._two_tries("seleção do CV", job, attempt) or default_cv(cv)
@@ -250,11 +288,15 @@ class Pipeline:
         self.stats.clear()
         self.errors.clear()
         self.deadline = None
+        self.budget_ends_at = None
         with self.sessions.begin() as s:
             repo = JobRepository(s)
             if repo.mark_interrupted_runs():
                 self.log("execução anterior foi interrompida; continuando de onde parou")
-            run_id = repo.start_run().id
+            run = repo.start_run()
+            run.log_path = self.log_path
+            run_id = run.id
+        self.run_id = run_id
         status = RunStatus.SUCCESS
         try:
             for step in steps:
@@ -274,5 +316,7 @@ class Pipeline:
                 run = s.get_one(Run, run_id)
                 run.status, run.finished_at = status, utcnow()
                 run.stats, run.errors = dict(self.stats), list(self.errors)
+                run.current_item = None
+            self.run_id = None
         with self.sessions() as s:
             return s.get_one(Run, run_id)
