@@ -78,6 +78,16 @@ class AutomationConfig(BaseModel):
 
 
 class LLMConfig(BaseModel):
+    provider: Literal["claude", "ollama"] = Field(
+        default="claude",
+        description="claude: Claude Code CLI com o login da assinatura (sem API key) e "
+        "similaridade por palavras-chave. ollama: modelos locais para nota e embeddings.",
+    )
+    claude_model: str = Field(default="haiku", description="Alias ou nome completo do modelo.")
+    claude_executable: str = "claude"
+    time_budget_minutes: int | None = Field(
+        default=120, ge=1, description="Tempo máximo da etapa de nota por execução."
+    )
     local_model: str = "qwen3:8b"
     embed_model: str = "bge-m3"
     ollama_url: str = "http://localhost:11434"

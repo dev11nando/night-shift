@@ -6,14 +6,17 @@ import urllib.request
 import typer
 
 from night_shift import __version__
+from night_shift.adapters.llm.claude_cli import ClaudeCLI, find_executable
 from night_shift.adapters.llm.ollama import OllamaEmbedder, OllamaLLM
 from night_shift.adapters.sources import build_sources
 from night_shift.adapters.sources.ats import ATS_SOURCES
 from night_shift.adapters.sources.http import PoliteClient, make_client
 from night_shift.adapters.storage import db
 from night_shift.adapters.storage.repository import JobRepository
+from night_shift.application.keywords import KeywordEmbedder
 from night_shift.application.pipeline import Pipeline
 from night_shift.config import (
+    AutomationConfig,
     CompanyConfig,
     ConfigError,
     LLMConfig,
@@ -116,23 +119,19 @@ def doctor() -> None:
     else:
         report(False, "banco", "não existe, rode `night-shift init`")
 
-    # Ollama só é exigido pelo `rank`; a coleta funciona sem ele, então aqui é só aviso.
+    # O LLM só é exigido pelo `rank`; a coleta funciona sem ele, então aqui é só aviso.
     def warn(label: str, detail: str) -> None:
         typer.echo(f"[{typer.style('warn', fg='yellow')}] {label}: {detail}")
 
     llm = profile.llm if profile else LLMConfig()
-    try:
-        with urllib.request.urlopen(f"{llm.ollama_url}/api/tags", timeout=2) as resp:
-            models = [m["name"] for m in json.load(resp).get("models", [])]
-    except (urllib.error.URLError, OSError, ValueError):
-        warn("ollama", f"não encontrado em {llm.ollama_url} (necessário para `rank`)")
-    else:
-        names = {m.removesuffix(":latest") for m in models}
-        missing = [m for m in (llm.local_model, llm.embed_model) if m not in names]
-        if missing:
-            warn("ollama", "faltam modelos: " + ", ".join(f"`ollama pull {m}`" for m in missing))
+    if llm.provider == "claude":
+        exe = find_executable(llm.claude_executable)
+        if exe:
+            report(True, "claude cli", f"{exe} (modelo {llm.claude_model})")
         else:
-            report(True, "ollama", f"{llm.local_model} + {llm.embed_model}")
+            warn("claude cli", "não encontrado; `winget install Anthropic.ClaudeCode` e `claude`")
+    else:
+        _check_ollama(llm, report, warn)
 
     if IS_WINDOWS:
         try:
@@ -151,6 +150,21 @@ def doctor() -> None:
                 report(True, "job object", "ok")
 
     raise typer.Exit(0 if ok else 1)
+
+
+def _check_ollama(llm: LLMConfig, report, warn) -> None:
+    try:
+        with urllib.request.urlopen(f"{llm.ollama_url}/api/tags", timeout=2) as resp:
+            models = [m["name"] for m in json.load(resp).get("models", [])]
+    except (urllib.error.URLError, OSError, ValueError):
+        warn("ollama", f"não encontrado em {llm.ollama_url} (necessário para `rank`)")
+    else:
+        names = {m.removesuffix(":latest") for m in models}
+        missing = [m for m in (llm.local_model, llm.embed_model) if m not in names]
+        if missing:
+            warn("ollama", "faltam modelos: " + ", ".join(f"`ollama pull {m}`" for m in missing))
+        else:
+            report(True, "ollama", f"{llm.local_model} + {llm.embed_model}")
 
 
 # ------------------------------------------------------------------ pipeline
@@ -198,19 +212,46 @@ def _collect_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline):
     ]
 
 
-def _rank_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline, top: int | None):
+def _llm_and_embedder(llm_cfg: LLMConfig, cv_text: str):
+    if llm_cfg.provider == "ollama":
+        return (
+            OllamaLLM(llm_cfg.ollama_url, llm_cfg.local_model, think=llm_cfg.think),
+            OllamaEmbedder(llm_cfg.ollama_url, llm_cfg.embed_model),
+        )
+    return (
+        ClaudeCLI(llm_cfg.claude_model, executable=llm_cfg.claude_executable),
+        KeywordEmbedder(cv_text),
+    )
+
+
+def _rank_steps(
+    paths: ProjectPaths,
+    profile: Profile,
+    pipeline: Pipeline,
+    top: int | None,
+    budget_minutes: int | None,
+):
     cv_text = _load_or_exit(load_cv, paths.cv_file).as_text()
     llm_cfg = profile.llm
-    embedder = OllamaEmbedder(llm_cfg.ollama_url, llm_cfg.embed_model)
-    llm = OllamaLLM(llm_cfg.ollama_url, llm_cfg.local_model, think=llm_cfg.think)
+    llm, embedder = _llm_and_embedder(llm_cfg, cv_text)
+    minutes = budget_minutes or llm_cfg.time_budget_minutes
     return [
         lambda: pipeline.screen(HardFilter(profile.preferences)),
         lambda: pipeline.embed_rank(embedder, cv_text),
-        lambda: pipeline.llm_score(llm, profile, cv_text, top or llm_cfg.rank_top_n),
+        lambda: pipeline.llm_score(
+            llm,
+            profile,
+            cv_text,
+            top or llm_cfg.rank_top_n,
+            budget_seconds=minutes * 60 if minutes else None,
+        ),
     ]
 
 
 TopOption = typer.Option(None, "--top", help="Quantas vagas mandar ao LLM (padrão: profile).")
+BudgetOption = typer.Option(
+    None, "--time-budget", help="Minutos máximos da etapa de nota (padrão: profile, 120)."
+)
 
 
 @app.command()
@@ -220,17 +261,19 @@ def collect() -> None:
 
 
 @app.command()
-def rank(top: int | None = TopOption) -> None:
-    """Compara as vagas filtradas com o CV (embeddings) e dá nota às melhores (LLM local)."""
-    _run_steps("rank", lambda p, prof, pipe: _rank_steps(p, prof, pipe, top))
+def rank(top: int | None = TopOption, time_budget: int | None = BudgetOption) -> None:
+    """Ordena as vagas filtradas pela semelhança com o CV e dá nota às melhores com o LLM."""
+    _run_steps("rank", lambda p, prof, pipe: _rank_steps(p, prof, pipe, top, time_budget))
 
 
 @app.command()
-def run(top: int | None = TopOption) -> None:
+def run(top: int | None = TopOption, time_budget: int | None = BudgetOption) -> None:
     """Pipeline da noite: coleta + filtro + similaridade + nota do LLM."""
     _run_steps(
         "run",
-        lambda p, prof, pipe: _collect_steps(p, prof, pipe) + _rank_steps(p, prof, pipe, top)[1:],
+        lambda p, prof, pipe: (
+            _collect_steps(p, prof, pipe) + _rank_steps(p, prof, pipe, top, time_budget)[1:]
+        ),
     )
 
 
@@ -278,7 +321,12 @@ def serve(
     typer.echo(f"painel em {url}  (Ctrl+C para parar)")
     if open_browser:
         threading.Timer(1.0, webbrowser.open, args=[url]).start()
-    uvicorn.run(create_app(pipeline.sessions), host="127.0.0.1", port=port, log_level="warning")
+    try:
+        threshold = load_profile(paths.profile_file).automation.auto_apply_min_score
+    except ConfigError:
+        threshold = AutomationConfig().auto_apply_min_score
+    web_app = create_app(pipeline.sessions, auto_threshold=threshold)
+    uvicorn.run(web_app, host="127.0.0.1", port=port, log_level="warning")
 
 
 @db_app.command("enrich")
