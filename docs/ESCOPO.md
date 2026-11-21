@@ -91,8 +91,8 @@ Agendado pelo Agendador de Tarefas do Windows (ex.: 02:00). Cada etapa é idempo
 ```
 1. collect      → centenas de vagas, dedupe por (fonte, id_externo) e hash do texto
 2. hard_filter  → regras: stack, nível, local, palavras proibidas, já visto      (custo 0)
-3. embed_rank   → similaridade vaga × CV mestre, corta no top ~30                 (GPU, custo 0)
-4. llm_score    → modelo local dá nota 0–100 + justificativa curta + red flags    (Ollama)
+3. embed_rank   → similaridade vaga × CV mestre, corta no top ~30                 (palavras-chave, custo 0)
+4. llm_score    → LLM dá nota 0–100 + justificativa curta + red flags              (Claude Haiku, limite de tempo)
 5. tailor       → seleciona/reordena bullets do CV mestre e gera o PDF            (Ollama)
 6. letter       → carta curta para score alto                                    (Claude, poucos/dia)
 7. apply_or_queue → baixo risco + score ≥ limiar ⇒ aplica; senão ⇒ fila
@@ -100,11 +100,28 @@ Agendado pelo Agendador de Tarefas do Windows (ex.: 02:00). Cada etapa é idempo
 9. report       → resumo da noite no painel
 ```
 
-### Orçamento de LLM (GPU de 8 GB)
+### Orçamento de LLM
 
-- **Local (Ollama):** modelo de 7–8B quantizado em Q4 (~5 GB de VRAM), ex.: Qwen ou Llama da geração atual. Escolher por benchmark próprio com ~20 vagas rotuladas por mim. Usado nas etapas 4, 5 e nas respostas de formulário.
-- **Claude (plano Pro):** só nas etapas 6 e 8, com teto diário configurável (ex.: 10 cartas + 5 outreach). Rodado na mesma janela da madrugada, via `claude -p` com uma skill do projeto que restringe a tarefa.
-- O `LLMProvider` é trocável: tudo pode cair para o local se o limite do Pro acabar.
+**Decisão de 21/11/2026 (experimental): Ollama fica de fora.** A nota das vagas usa o
+**Claude Haiku via Claude Code CLI** (`claude -p`), com o login da assinatura Pro, sem chave
+de API, com um limite de tempo por execução (padrão 120 min). A etapa 3 usa similaridade por
+palavras-chave do CV em vez de embeddings. Medido: cerca de 10 s por vaga, então 2 h cobrem
+cerca de 650 vagas, folga grande para as ~60 que passam no filtro por noite.
+
+- **Claude (plano Pro):** etapas 4–6 e 8. O consumo entra nos limites do plano; se o limite
+  acabar, a etapa para e o que já foi avaliado fica salvo.
+- **Local (Ollama):** continua disponível com `llm.provider: ollama` (qwen3:8b + bge-m3 em
+  GPU de 8 GB).
+- O `LLMProvider` é trocável por config, sem mexer no pipeline.
+
+### Duas filas
+
+Cada vaga avaliada cai numa fila, calculada na hora (mudar o limiar reclassifica tudo):
+
+- **Automática:** fonte de baixo risco (Greenhouse, Lever, Ashby) **e** nota ≥
+  `automation.auto_apply_min_score` (85) **e** nenhum red flag. Aplicada depois pelo
+  `night-shift apply` (Fase 5), que você dispara quando quiser.
+- **Manual:** todo o resto, com o motivo exibido no painel.
 
 ---
 

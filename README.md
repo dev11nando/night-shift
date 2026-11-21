@@ -28,21 +28,27 @@ Esses arquivos ficam **fora do git**.
 > e aí o `night-shift off` não consegue garantir que nada fique rodando. O projeto já fixa
 > `python-preference = "only-managed"` e o `doctor` acusa se a venv estiver no Python errado.
 
-### LLM local
+### LLM
 
-Instale o [Ollama](https://ollama.com) e baixe os modelos (cabem numa GPU de 8 GB):
+Padrão (`llm.provider: claude`): Claude Haiku pelo **Claude Code CLI**, com o login da sua
+assinatura, sem chave de API. O consumo entra nos limites do seu plano.
 
 ```powershell
-ollama pull qwen3:8b   # nota das vagas
-ollama pull bge-m3     # embeddings (similaridade vaga x CV)
+winget install Anthropic.ClaudeCode
+claude          # num terminal novo: faça login com a conta da assinatura e saia com /exit
 ```
+
+Alternativa local (`llm.provider: ollama`): instale o [Ollama](https://ollama.com) e rode
+`ollama pull qwen3:8b` e `ollama pull bge-m3`.
 
 ## Uso
 
 ```powershell
 uv run night-shift run                 # coleta + filtro + similaridade + nota (pipeline da noite)
-uv run night-shift collect             # só coleta e filtro (não precisa de Ollama)
+uv run night-shift run --time-budget 120   # nota por no máximo 120 min; o resto fica p/ depois
+uv run night-shift collect             # só coleta e filtro (não precisa de LLM)
 uv run night-shift rank --top 10       # só similaridade + nota
+uv run night-shift rank --rescore      # reavalia vagas sem decisão (ex.: depois de mudar o prompt)
 uv run night-shift serve --open        # painel em http://127.0.0.1:8765 (Hoje, Fila, Mercado)
 uv run night-shift jobs -n 20          # melhores vagas avaliadas, no terminal
 uv run night-shift db enrich           # extrai nível/contrato/salário de vagas antigas
