@@ -1,0 +1,11 @@
+# Empresas-alvo: usadas na coleta (ATS) e no outreach. O arquivo real NÃO vai para o git.
+# ats: greenhouse | lever | ashby | gupy | outro
+# slug: identificador do job board (ex.: boards.greenhouse.io/<slug>)
+
+companies:
+  - name: Exemplo Fintech
+    sector: fintech                   # fintech | fundo | banco_digital | ia
+    website: https://example.com
+    ats: greenhouse
+    slug: examplefintech
+    outreach_contact: null            # e-mail de quem recebe o cold e-mail

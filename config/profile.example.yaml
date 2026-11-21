@@ -1,0 +1,33 @@
+# Copiado para config/profile.yaml por `night-shift init`. O arquivo real NÃO vai para o git.
+
+name: Seu Nome
+email: voce@example.com
+
+preferences:
+  levels: [pleno, junior]            # ordem = prioridade
+  work_models: [remoto, hibrido, presencial]
+  contracts: [clt, pj]
+  locations: [São Paulo]
+  salary:                             # bruto mensal em R$
+    pleno:
+      clt_min: 6000
+      # pj_min: 9000                  # se omitido, usa clt_min x 1,45
+    junior:
+      clt_min: 3500
+  keywords: [python, fastapi, aws, llm, backend]
+  blocked_keywords: [estágio, php, .net]
+
+automation:
+  enabled: false                      # kill switch de qualquer submissão
+  auto_apply_min_score: 85
+  daily_auto_apply_limit: 10
+
+llm:
+  local_model: qwen3:8b
+  ollama_url: http://localhost:11434
+  claude_daily_letters: 10
+  claude_daily_outreach: 5
+
+turn_off:
+  grace_seconds: 30
+  stop_ollama: false

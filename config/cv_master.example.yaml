@@ -1,0 +1,24 @@
+# CV mestre: TODOS os fatos verdadeiros, um bullet por realização.
+# O LLM só escolhe/reordena IDs, nunca escreve bullet novo. O arquivo real NÃO vai para o git.
+
+summary: >
+  Engenheiro de Software backend com Python...
+
+experiences:
+  - company: Empresa X
+    role: Engenheiro de Software
+    period: 2024-02/2026-08
+    bullets:
+      - id: x-apis
+        text: Desenvolvimento de APIs e microsserviços em Python com FastAPI, SQLAlchemy e Pydantic.
+        tags: [python, fastapi, backend]
+
+education:
+  - school: Faculdade Y
+    course: Análise e Desenvolvimento de Sistemas
+    period: 2022-08/2024-06
+
+skills: [python, fastapi, aws, docker]
+languages:
+  - {name: Português, level: nativo}
+  - {name: Inglês, level: intermediário}

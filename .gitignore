@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Dados pessoais — NUNCA versionar (só os *.example.yaml)
+config/*.yaml
+!config/*.example.yaml
+.env
+secrets/
+
+# Dados gerados em runtime
+data/
+run/
+logs/
+output/
+
+# IDE / SO
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

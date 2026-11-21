@@ -1,0 +1,51 @@
+[project]
+name = "night-shift"
+version = "0.1.0"
+description = "Busca, avalia e se candidata a vagas enquanto você dorme."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.13",
+    "psutil>=6.0",
+    "pydantic>=2.8",
+    "pywin32>=306; sys_platform == 'win32'",
+    "pyyaml>=6.0",
+    "sqlalchemy>=2.0.30",
+    "typer>=0.12",
+]
+
+[project.scripts]
+night-shift = "night_shift.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+# O Python da Microsoft Store roda num pacote AppX cujo job permite "silent breakaway":
+# os filhos escapam do nosso Job Object e o `night-shift off` deixaria órfãos.
+python-preference = "only-managed"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/night_shift"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/night_shift/adapters/storage/migrations/versions/*" = ["E501"]
