@@ -261,8 +261,17 @@ def collect() -> None:
 
 
 @app.command()
-def rank(top: int | None = TopOption, time_budget: int | None = BudgetOption) -> None:
+def rank(
+    top: int | None = TopOption,
+    time_budget: int | None = BudgetOption,
+    rescore: bool = typer.Option(
+        False, "--rescore", help="Apaga as notas de vagas sem decisão e avalia de novo."
+    ),
+) -> None:
     """Ordena as vagas filtradas pela semelhança com o CV e dá nota às melhores com o LLM."""
+    if rescore:
+        with _pipeline(_paths()).sessions.begin() as s:
+            typer.echo(f"{JobRepository(s).reset_llm_scores()} nota(s) apagada(s) para reavaliar")
     _run_steps("rank", lambda p, prof, pipe: _rank_steps(p, prof, pipe, top, time_budget))
 
 

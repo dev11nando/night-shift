@@ -4,9 +4,10 @@ from datetime import datetime
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
-from night_shift.adapters.storage.models import Company, Job, Run, Score, utcnow
+from night_shift.adapters.storage.models import Application, Company, Job, Run, Score, utcnow
 from night_shift.config import CompanyConfig
 from night_shift.domain.enrich import enrich
+from night_shift.domain.enums import ApplicationStatus
 from night_shift.domain.job import JobPosting
 
 
@@ -125,6 +126,18 @@ class JobRepository:
     ) -> None:
         score.llm_score, score.rationale = value, rationale
         score.red_flags, score.model, score.scored_at = red_flags, model, utcnow()
+
+    def reset_llm_scores(self) -> int:
+        """Apaga as notas do LLM de vagas ainda sem decisão, para reavaliar (ex.: depois de
+        mudar o prompt ou o modelo). Decididas (aplicadas/descartadas) ficam como estão."""
+        decided = select(Application.job_id).where(Application.status != ApplicationStatus.QUEUED)
+        scores = self.s.scalars(
+            select(Score).where(Score.llm_score.is_not(None), Score.job_id.not_in(decided))
+        ).all()
+        for sc in scores:
+            sc.llm_score = sc.rationale = sc.model = sc.scored_at = None
+            sc.red_flags = []
+        return len(scores)
 
     def ranked(self, limit: int, since: datetime | None = None) -> Sequence[Score]:
         q = select(Score).where(Score.llm_score.is_not(None))
