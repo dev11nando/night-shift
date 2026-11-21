@@ -1,0 +1,54 @@
+{% set c = o.company %}
+<article class="card outreach" id="outreach-{{ o.id }}">
+  <div class="body">
+    <h3>{{ c.name }}</h3>
+    <p class="meta">
+      {% if c.sector %}<span class="tag">{{ c.sector | replace('_', ' ') }}</span>{% endif %}
+      {% if c.website %}<a href="{{ c.website }}" target="_blank" rel="noopener">site</a>{% endif %}
+      {% if c.careers_url %}<a href="{{ c.careers_url }}" target="_blank" rel="noopener">carreiras</a>{% endif %}
+      <a href="{{ linkedin_search(c.name) }}" target="_blank" rel="noopener">recrutadores no LinkedIn</a>
+      {% if o.status != 'draft' and o.sent_at %}<span class="muted">enviada em {{ o.sent_at | local_dt }}</span>{% endif %}
+    </p>
+    {% if c.about %}<p class="muted about">{{ c.about }}</p>{% endif %}
+
+    <div class="msg">
+      <div class="msg-head">
+        <b>Nota do LinkedIn</b>
+        <span class="muted">{{ (o.linkedin_note or '') | length }}/300</span>
+        <button class="btn ghost small" type="button" onclick="copyText('note-{{ o.id }}', this)">Copiar</button>
+      </div>
+      <div class="msg-body" id="note-{{ o.id }}">{{ o.linkedin_note }}</div>
+    </div>
+
+    <details class="msg"{% if o.to_address %} open{% endif %}>
+      <summary><b>E-mail</b>
+        {% if o.to_address %}para <code>{{ o.to_address }}</code>
+          {% if c.contact_source_url and c.contact_source_url.startswith('http') %}
+            (<a href="{{ c.contact_source_url }}" target="_blank" rel="noopener">publicado aqui</a>)
+          {% endif %}
+        {% else %}<span class="muted">(sem e-mail de RH público: use se achar um contato)</span>{% endif %}
+      </summary>
+      <p><span class="muted">Assunto:</span> <span id="subject-{{ o.id }}">{{ o.subject }}</span></p>
+      <div class="msg-body" id="email-{{ o.id }}">{{ o.body }}</div>
+      <div class="msg-actions">
+        <button class="btn ghost small" type="button" onclick="copyText('email-{{ o.id }}', this)">Copiar e-mail</button>
+        {% if o.to_address %}
+        <a class="btn small" target="_blank" rel="noopener"
+           href="{{ gmail_compose(o.to_address, o.subject, o.body) }}">Abrir no Gmail</a>
+        {% endif %}
+      </div>
+    </details>
+  </div>
+  <div class="actions">
+    {% if o.status == 'draft' %}
+      <button class="btn primary" hx-post="/outreach/{{ o.id }}/sent" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML">Marcar enviada</button>
+      <button class="btn ghost" hx-post="/outreach/{{ o.id }}/discard" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML">Descartar</button>
+    {% elif o.status == 'sent' %}
+      <button class="btn" hx-post="/outreach/{{ o.id }}/replied" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML">Responderam</button>
+      <button class="btn ghost" hx-post="/outreach/{{ o.id }}/undo" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML">Desfazer</button>
+    {% else %}
+      {% if o.status == 'replied' %}<span class="ok">Responderam</span>{% endif %}
+      <button class="btn ghost" hx-post="/outreach/{{ o.id }}/undo" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML">Voltar para enviar</button>
+    {% endif %}
+  </div>
+</article>

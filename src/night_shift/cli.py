@@ -348,6 +348,47 @@ def docs(
     _run_steps("docs", lambda p, prof, pipe: _docs_steps(p, prof, pipe, limit))
 
 
+def _outreach_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline, limit: int | None):
+    from night_shift.adapters.contacts import ContactFinder
+
+    cv = _load_or_exit(load_cv, paths.cv_file)
+    companies = _load_or_exit(load_companies, paths.companies_file)
+    llm_cfg = profile.llm
+    if llm_cfg.provider == "ollama":
+        llm = OllamaLLM(llm_cfg.ollama_url, llm_cfg.local_model, think=llm_cfg.think)
+    else:
+        llm = ClaudeCLI(llm_cfg.documents_model, executable=llm_cfg.claude_executable)
+    finder = ContactFinder(PoliteClient(make_client(), min_interval=0.5))
+    minutes = llm_cfg.time_budget_minutes
+
+    def sync():
+        with pipeline.sessions.begin() as s:
+            JobRepository(s).sync_companies(companies)
+
+    return [
+        sync,
+        lambda: pipeline.discover_contacts(finder),
+        lambda: pipeline.outreach(
+            llm,
+            profile,
+            cv,
+            limit if limit is not None else llm_cfg.claude_daily_outreach,
+            budget_seconds=minutes * 60 if minutes else None,
+        ),
+    ]
+
+
+@app.command()
+def outreach(
+    limit: int | None = typer.Option(
+        None, "--limit", "-n", help="Máximo de mensagens hoje (padrão: llm.claude_daily_outreach)."
+    ),
+) -> None:
+    """Varre os sites das empresas (contato de RH, carreiras) e escreve mensagens de outreach
+    (nota do LinkedIn + e-mail). Nada é enviado: tudo fica na aba Outreach do painel."""
+    _run_steps("outreach", lambda p, prof, pipe: _outreach_steps(p, prof, pipe, limit))
+
+
 @app.command()
 def run(top: int | None = TopOption, time_budget: int | None = BudgetOption) -> None:
     """Pipeline da noite: coleta, filtro, similaridade, nota do LLM, CV ajustado e carta.
@@ -359,6 +400,7 @@ def run(top: int | None = TopOption, time_budget: int | None = BudgetOption) -> 
             _collect_steps(p, prof, pipe)
             + _rank_steps(p, prof, pipe, top, time_budget)[1:]
             + _docs_steps(p, prof, pipe, None)
+            + _outreach_steps(p, prof, pipe, None)
         ),
     )
 
@@ -427,9 +469,13 @@ def serve(
     if open_browser:
         threading.Timer(1.0, webbrowser.open, args=[url]).start()
     try:
-        threshold = load_profile(paths.profile_file).automation.auto_apply_min_score
+        prof = load_profile(paths.profile_file)
+        threshold, daily_outreach = (
+            prof.automation.auto_apply_min_score,
+            prof.llm.claude_daily_outreach,
+        )
     except ConfigError:
-        threshold = AutomationConfig().auto_apply_min_score
+        threshold, daily_outreach = AutomationConfig().auto_apply_min_score, 10
     scheduler = _scheduler()
 
     def turn_everything_off() -> list[str]:
@@ -451,6 +497,7 @@ def serve(
         logs_dir=paths.logs_dir,
         request_stop=StopFlag(paths.run_dir).request,
         start_run=(lambda: _start_on_demand(paths)) if scheduler else None,
+        outreach_daily_limit=daily_outreach,
     )
     uvicorn.run(web_app, host="127.0.0.1", port=port, log_level="warning")
 

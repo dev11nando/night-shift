@@ -15,8 +15,10 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from night_shift import __version__
 from night_shift.adapters.storage.models import Job
+from night_shift.adapters.storage.outreach import OutreachRepository
 from night_shift.adapters.storage.review import ReviewRepository
-from night_shift.domain.enums import ApplicationStatus
+from night_shift.application.outreach import linkedin_people_search
+from night_shift.domain.enums import ApplicationStatus, OutreachStatus
 from night_shift.domain.lanes import Lane, manual_reason
 from night_shift.web.live import live_context
 
@@ -64,7 +66,20 @@ def score_class(score: int | None) -> str:
 
 
 templates.env.filters.update(brl=brl, local_dt=local_dt, score_class=score_class)
-templates.env.globals.update(duration=duration, version=__version__)
+
+
+def gmail_compose(to: str, subject: str, body: str) -> str:
+    """Abre o Gmail na web com o e-mail pronto (você anexa o CV e envia)."""
+    query = urlencode({"view": "cm", "fs": "1", "to": to, "su": subject, "body": body})
+    return f"https://mail.google.com/mail/?{query}"
+
+
+templates.env.globals.update(
+    duration=duration,
+    version=__version__,
+    gmail_compose=gmail_compose,
+    linkedin_search=linkedin_people_search,
+)
 
 
 # ---------------------------------------------------------------------- app
@@ -80,6 +95,7 @@ def create_app(
     logs_dir: Path | None = None,
     request_stop: Callable[[], None] | None = None,
     start_run: Callable[[], str] | None = None,
+    outreach_daily_limit: int = 10,
 ) -> FastAPI:
     """``auto_threshold``: nota mínima para uma vaga de fonte de baixo risco ir para a fila
     automática (``automation.auto_apply_min_score`` no profile.yaml)."""
@@ -100,6 +116,7 @@ def create_app(
 
     def page(request: Request, name: str, repo: ReviewRepository, **ctx) -> HTMLResponse:
         ctx.setdefault("counts", repo.counts())
+        ctx.setdefault("ocounts", OutreachRepository(repo.s).counts())
         ctx.update(card_ctx(repo))
         ctx.setdefault("can_start", start_run is not None)
         ctx.setdefault("can_turn_off", on_turn_off is not None)
@@ -166,6 +183,51 @@ def create_app(
     @app.post("/jobs/{job_id}/undo", response_class=HTMLResponse)
     def undo(request: Request, repo: Repo, job_id: int):
         return _decide(request, repo, job_id, None)
+
+    # --------------------------------------------------------------- outreach
+
+    OUTREACH_VIEWS = {
+        "pendentes": (OutreachStatus.DRAFT,),
+        "enviadas": (OutreachStatus.SENT, OutreachStatus.REPLIED),
+        "descartadas": (OutreachStatus.DISCARDED,),
+    }
+
+    @app.get("/outreach", response_class=HTMLResponse)
+    def outreach_page(
+        request: Request,
+        repo: Repo,
+        view: Annotated[str, Query(pattern="^(pendentes|enviadas|descartadas)$")] = "pendentes",
+    ):
+        orepo = OutreachRepository(repo.s)
+        return page(
+            request,
+            "outreach.html",
+            repo,
+            active="outreach",
+            view=view,
+            items=orepo.by_status(*OUTREACH_VIEWS[view]),
+            daily_limit=outreach_daily_limit,
+        )
+
+    OUTREACH_ACTIONS = {
+        "sent": OutreachStatus.SENT,
+        "discard": OutreachStatus.DISCARDED,
+        "replied": OutreachStatus.REPLIED,
+        "undo": OutreachStatus.DRAFT,
+    }
+
+    @app.post("/outreach/{outreach_id}/{action}", response_class=HTMLResponse)
+    def outreach_action(request: Request, repo: Repo, outreach_id: int, action: str):
+        if request.headers.get("HX-Request") != "true":
+            raise HTTPException(403, "use o painel")
+        if action not in OUTREACH_ACTIONS:
+            raise HTTPException(404)
+        try:
+            row = OutreachRepository(repo.s).set_status(outreach_id, OUTREACH_ACTIONS[action])
+        except NoResultFound as e:
+            raise HTTPException(404, "mensagem não encontrada") from e
+        ctx = {"o": row, "counts": repo.counts(), "oob": True, **card_ctx(repo)}
+        return templates.TemplateResponse(request, "_outreach_card.html", ctx)
 
     @app.get("/mercado", response_class=HTMLResponse)
     def mercado(request: Request, repo: Repo):
