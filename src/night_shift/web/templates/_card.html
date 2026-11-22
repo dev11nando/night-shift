@@ -8,6 +8,7 @@
       <strong>{{ j.company_name }}</strong>
       <span>{{ j.location or 'local não informado' }}</span>
       {% if j.work_model %}<span class="tag">{{ j.work_model }}</span>{% endif %}
+      {% if j.stack %}<span class="tag stack stack-{{ j.stack }}">{{ {'python': 'Python', 'ia': 'IA', 'java': 'Java'}.get(j.stack, j.stack) }}</span>{% endif %}
       {% if j.level %}<span class="tag">{{ j.level }}</span>{% endif %}
       {% if j.contract %}<span class="tag">{{ j.contract | upper }}</span>{% endif %}
       {% if j.salary_min or j.salary_max %}<span class="tag money">{{ j.salary_min | brl }}{% if j.salary_max %} a {{ j.salary_max | brl }}{% endif %}</span>{% endif %}

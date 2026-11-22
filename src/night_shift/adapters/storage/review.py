@@ -61,12 +61,20 @@ class ReviewRepository:
             .all()
         )
 
-    def queue(self, lane: Lane | None = None, min_score: int = 0, limit: int = 100) -> list[Score]:
+    def queue(
+        self,
+        lane: Lane | None = None,
+        min_score: int = 0,
+        limit: int = 100,
+        stack: str | None = None,
+    ) -> list[Score]:
         """Vagas avaliadas ainda sem decisão, da maior nota para a menor, opcionalmente só
-        de uma fila. A fila é calculada na hora, então o filtro é feito em Python."""
+        de uma fila e de uma stack. A fila é calculada na hora, então o filtro é em Python."""
         pending = self._pending(min_score)
         if lane is not None:
             pending = [sc for sc in pending if self.lane(sc) is lane]
+        if stack:
+            pending = [sc for sc in pending if sc.job.stack == stack]
         return list(pending[:limit])
 
     def decided(self, statuses: tuple[ApplicationStatus, ...], limit: int = 100) -> Sequence[Score]:
