@@ -1,0 +1,43 @@
+{% macro move_button(job_id, to, label, kind='primary') -%}
+<button class="btn small {{ kind }}" hx-post="/funil/{{ job_id }}/mover/{{ to }}" hx-target="#board" hx-swap="outerHTML">{{ label }}</button>
+{%- endmacro %}
+{% set j = app.job %}
+<article class="fcard" id="fcard-{{ j.id }}">
+  <a class="ftitle" href="{{ j.url }}" target="_blank" rel="noopener">{{ j.title }}</a>
+  <p class="muted fmeta">{{ j.company_name }} · {{ j.source }}{% if app.applied_at %} · aplicada {{ app.applied_at | local_dt }}{% endif %}</p>
+
+  {% if app.events | length > 1 %}
+  <ol class="timeline">
+    {% for e in app.events %}<li>{{ status_label(e.status) }} <span class="muted">{{ e.at | local_dt }}</span></li>{% endfor %}
+  </ol>
+  {% endif %}
+
+  <div class="moves">
+    {% if app.status in ('applied_manual', 'auto_applied') %}
+      {{ move_button(j.id, 'resposta', 'Teve resposta') }}
+      {{ move_button(j.id, 'recusada', 'Recusada', 'ghost') }}
+    {% elif app.status == 'replied' %}
+      {{ move_button(j.id, 'entrevista', 'Entrevista marcada') }}
+      {{ move_button(j.id, 'recusada', 'Recusada', 'ghost') }}
+    {% elif app.status == 'interview' %}
+      {{ move_button(j.id, 'proposta', 'Recebi proposta') }}
+      {{ move_button(j.id, 'recusada', 'Recusada', 'ghost') }}
+    {% elif app.status == 'offer' %}
+      <span class="ok">Proposta! 🎉</span>
+    {% else %}
+      {{ move_button(j.id, 'aplicada', 'Voltar para aplicada', 'ghost') }}
+    {% endif %}
+  </div>
+
+  {% set my_notes = notes.get(j.id, []) %}
+  <details class="notes"{% if my_notes %} open{% endif %}>
+    <summary>Anotações{% if my_notes %} ({{ my_notes | length }}){% endif %}</summary>
+    <ul>
+      {% for n in my_notes %}<li><span class="muted">{{ n.created_at | local_dt }}</span> {{ n.text }}</li>{% endfor %}
+    </ul>
+    <form hx-post="/jobs/{{ j.id }}/notas" hx-target="#board" hx-swap="outerHTML">
+      <textarea name="texto" rows="2" placeholder="Ex.: falei com a recrutadora, entrevista técnica dia 5" required maxlength="2000"></textarea>
+      <button class="btn small" type="submit">Anotar</button>
+    </form>
+  </details>
+</article>

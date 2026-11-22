@@ -1,0 +1,44 @@
+<div id="board">
+  <section class="funnel-stats">
+    {% set total = conversions[0] %}
+    <ol class="funnel-steps">
+      {% for key, label, _ in stages %}
+        <li>
+          <b>{{ total.reached[loop.index0] }}</b><span>{{ label | lower }}</span>
+          {% if not loop.last %}
+            {% set r = total.rate(loop.index0) %}
+            <em class="rate">{{ r ~ '%' if r is not none else '—' }} →</em>
+          {% endif %}
+        </li>
+      {% endfor %}
+      <li class="out"><b>{{ outreach_sent }}</b><span>outreach enviados · {{ outreach_replied }} responderam</span></li>
+    </ol>
+
+    {% if conversions | length > 1 %}
+    <details>
+      <summary>Conversão por fonte</summary>
+      <table>
+        <thead><tr><th>Fonte</th>{% for _, label, _ in stages %}<th class="num">{{ label }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for c in conversions[1:] %}
+          <tr><td>{{ c.label }}</td>{% for n in c.reached %}<td class="num">{{ n }}</td>{% endfor %}</tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </details>
+    {% endif %}
+  </section>
+
+  <div class="columns">
+    {% for key, label, _ in all_stages %}
+      <section class="column column-{{ key }}">
+        <h2>{{ label }} <span class="muted">{{ board[key] | length }}</span></h2>
+        {% for app in board[key] %}
+          {% include "_funnel_card.html" %}
+        {% else %}
+          <p class="muted empty-col">—</p>
+        {% endfor %}
+      </section>
+    {% endfor %}
+  </div>
+</div>
