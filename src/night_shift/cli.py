@@ -660,7 +660,13 @@ def _parse_time(value: str) -> dt_time:
 @schedule_app.command("install")
 def schedule_install(
     at: str = typer.Option("02:00", "--at", help="Horário diário (HH:MM)."),
-    max_hours: int = typer.Option(3, "--max-hours", help="Tempo máximo de uma execução."),
+    max_minutes: int = typer.Option(
+        180,
+        "--max-minutes",
+        min=5,
+        help="Tempo máximo de uma execução; o Windows encerra a tarefa depois disso. Para "
+        "terminar limpo antes, ajuste llm.time_budget_minutes no profile.yaml.",
+    ),
 ) -> None:
     """Cria (ou atualiza) a tarefa diária `night-shift run` no Agendador do Windows."""
     scheduler = _scheduler()
@@ -669,9 +675,9 @@ def schedule_install(
         raise typer.Exit(2)
     paths = _paths()
     exe = _venv_exe()
-    scheduler.install(exe, "run", paths.root, _parse_time(at), max_hours)
+    scheduler.install(exe, "run", paths.root, _parse_time(at), max_minutes)
     StopFlag(paths.run_dir).clear()
-    typer.echo(f"agendado: {scheduler.status().describe()}")
+    typer.echo(f"agendado: {scheduler.status().describe()}, no máximo {max_minutes} min")
     typer.echo(f"  comando: {exe} run   (pasta {paths.root})")
     typer.echo(f"  logs em: {paths.logs_dir}")
 

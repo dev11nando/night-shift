@@ -50,7 +50,7 @@ def test_task_xml_has_workdir_wake_and_catch_up():
         "run",
         Path(r"C:\Projetos\night shift"),
         time(2, 0),
-        max_hours=3,
+        max_minutes=30,
     )
     assert "T02:00:00</StartBoundary>" in xml
     assert r"<WorkingDirectory>C:\Projetos\night shift</WorkingDirectory>" in xml
@@ -58,7 +58,7 @@ def test_task_xml_has_workdir_wake_and_catch_up():
     assert "<WakeToRun>true</WakeToRun>" in xml
     assert "<StartWhenAvailable>true</StartWhenAvailable>" in xml
     assert "<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>" in xml
-    assert "<ExecutionTimeLimit>PT3H</ExecutionTimeLimit>" in xml
+    assert "<ExecutionTimeLimit>PT30M</ExecutionTimeLimit>" in xml
     assert "<LogonType>InteractiveToken</LogonType>" in xml, "sem senha, sem admin"
     assert "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>" in xml
 
