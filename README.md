@@ -122,7 +122,7 @@ LinkedIn em `contact.linkedin` do `cv_master.yaml` para sobrar menos campo para 
 ### Rodar sozinho toda noite
 
 ```powershell
-uv run night-shift schedule install --at 02:00   # tarefa diária no Agendador do Windows
+uv run night-shift schedule install --at 00:30 --max-minutes 30   # janela 00:30–01:00
 uv run night-shift schedule status               # "todo dia às 02:00"
 uv run night-shift schedule run-now              # dispara agora, pelo mesmo caminho da noite
 uv run night-shift off                           # desliga TUDO (pipeline, painel, tarefa)

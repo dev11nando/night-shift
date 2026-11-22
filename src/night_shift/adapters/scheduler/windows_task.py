@@ -45,7 +45,7 @@ class ScheduleStatus:
 
 
 def build_task_xml(
-    executable: Path, arguments: str, workdir: Path, at: time | None, max_hours: int = 3
+    executable: Path, arguments: str, workdir: Path, at: time | None, max_minutes: int = 180
 ) -> str:
     """``at=None`` cria a tarefa sem gatilho: ela só roda quando disparada com ``/Run``."""
     if at is None:
@@ -77,7 +77,7 @@ def build_task_xml(
     <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
     <StartWhenAvailable>true</StartWhenAvailable>
     <WakeToRun>true</WakeToRun>
-    <ExecutionTimeLimit>PT{max_hours}H</ExecutionTimeLimit>
+    <ExecutionTimeLimit>PT{max_minutes}M</ExecutionTimeLimit>
     <Enabled>true</Enabled>
     <Hidden>false</Hidden>
   </Settings>
@@ -109,9 +109,9 @@ class WindowsTaskScheduler:
         arguments: str,
         workdir: Path,
         at: time | None,
-        max_hours: int = 3,
+        max_minutes: int = 180,
     ) -> None:
-        xml = build_task_xml(executable, arguments, workdir, at, max_hours)
+        xml = build_task_xml(executable, arguments, workdir, at, max_minutes)
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "night-shift-task.xml"
             path.write_text(xml, encoding="utf-16")
