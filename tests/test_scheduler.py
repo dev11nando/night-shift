@@ -95,3 +95,8 @@ def test_enable_disable_remove_only_when_installed():
 
     for op in (sched.enable, sched.disable, sched.remove):
         assert op() is False
+
+
+def test_on_demand_task_has_no_trigger():
+    xml = build_task_xml(Path("ns.exe"), "run", Path("."), None)
+    assert "<Triggers />" in xml and "StartBoundary" not in xml

@@ -1,0 +1,32 @@
+# CV mestre em INGLÊS (opcional): tradução do cv_master.yaml com os MESMOS ids de bullet e a
+# mesma quantidade de habilidades. Se existir, vagas em inglês recebem CV em inglês.
+# O arquivo real NÃO vai para o git. Confira com `night-shift cv check`.
+
+headline: Backend Software Engineer
+contact:
+  phone: +55 11 90000-0000
+  location: São Paulo, Brazil
+  linkedin: linkedin.com/in/your-profile
+  github: github.com/your-user
+
+summary: >
+  Backend Software Engineer with Python...
+
+experiences:
+  - company: Company X
+    role: Software Engineer
+    period: 2024-02/2026-08
+    bullets:
+      - id: x-apis
+        text: Built APIs and microservices in Python with FastAPI, SQLAlchemy and Pydantic.
+        tags: [python, fastapi, backend]
+
+education:
+  - school: College Y
+    course: Associate Degree in Systems Analysis and Development
+    period: 2022-08/2024-06
+
+skills: [python, fastapi, aws, docker]
+languages:
+  - {name: Portuguese, level: native}
+  - {name: English, level: intermediate}

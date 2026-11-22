@@ -67,6 +67,11 @@ class ProjectPaths:
         return self.config_dir / "companies.yaml"
 
     @property
+    def cv_en_file(self) -> Path:
+        """CV mestre em inglês (opcional): mesmos ids do cv_master.yaml."""
+        return self.config_dir / "cv_master.en.yaml"
+
+    @property
     def cv_file(self) -> Path:
         return self.config_dir / "cv_master.yaml"
 

@@ -9,6 +9,7 @@ from night_shift.domain.cv import (
     apply_selection,
     default_cv,
     invented_terms,
+    translation_problems,
 )
 
 CV = CVMaster.model_validate(
@@ -142,3 +143,59 @@ def test_render_pdf(tmp_path):
 def test_experience_selection_requires_company():
     with pytest.raises(ValueError):
         ExperienceSelection.model_validate({"bullet_ids": []})
+
+
+# ------------------------------------------------------------- versão em inglês
+
+CV_EN = CV.model_copy(
+    update={
+        "summary": "Backend engineer with Python, AWS and LLMs.",
+        "experiences": [
+            e.model_copy(
+                update={
+                    "role": "Software Engineer",
+                    "bullets": [b.model_copy(update={"text": f"EN {b.text}"}) for b in e.bullets],
+                }
+            )
+            for e in CV.experiences
+        ],
+        "skills": ["Python", "FastAPI", "AWS Lambda", "LLMs", "Docker"],
+    }
+)
+
+
+def test_translation_ok():
+    assert translation_problems(CV, CV_EN) == []
+
+
+def test_translation_problems_are_explained():
+    iorq = CV_EN.experiences[0]
+    missing = iorq.model_copy(update={"bullets": iorq.bullets[:2]})
+    reordered = iorq.model_copy(update={"bullets": list(reversed(iorq.bullets))})
+    other_period = CV_EN.experiences[1].model_copy(update={"period": "2023-03/2024-01"})
+
+    def with_exps(*exps):
+        return CV_EN.model_copy(update={"experiences": list(exps)})
+
+    assert "faltam ['llm']" in translation_problems(CV, with_exps(missing, other_period))[0]
+    assert "período" in translation_problems(CV, with_exps(iorq, other_period))[0]
+    assert (
+        "ordem diferente" in translation_problems(CV, with_exps(reordered, CV_EN.experiences[1]))[0]
+    )
+    assert "experiências diferentes" in translation_problems(CV, with_exps(iorq))[0]
+    fewer_skills = CV_EN.model_copy(update={"skills": ["Python"]})
+    assert "habilidades" in translation_problems(CV, fewer_skills)[0]
+
+
+def test_format_period_english():
+    assert format_period("2024-02/2026-08", "en") == "Feb 2024 – Aug 2026"  # noqa: RUF001
+
+
+def test_render_english_pdf(tmp_path):
+    out = render_cv_pdf(default_cv(CV_EN), "Fulano", "f@x.com", tmp_path / "cv-en.pdf", "en")
+    assert out.read_bytes().startswith(b"%PDF")
+
+
+def test_full_cv_keeps_every_skill():
+    many = CV.model_copy(update={"skills": [f"skill{i}" for i in range(20)]})
+    assert len(default_cv(many).skills) == 20, "o CV completo não corta habilidades"

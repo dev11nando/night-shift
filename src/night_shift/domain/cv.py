@@ -99,6 +99,38 @@ def apply_selection(cv: CVMaster, sel: CVSelection) -> TailoredCV:
     return TailoredCV(cv, sel.summary.strip() or cv.summary, experiences, skills or cv.skills)
 
 
+def translation_problems(original: CVMaster, translated: CVMaster) -> list[str]:
+    """Diferenças de estrutura entre o CV mestre e a tradução. Lista vazia = ok.
+
+    A seleção do LLM é feita por ID, então os dois precisam ter as mesmas experiências, na
+    mesma ordem, com os mesmos IDs de bullet, e a mesma quantidade de habilidades.
+    """
+    problems = []
+    a, b = original.experiences, translated.experiences
+    if [e.company for e in a] != [e.company for e in b]:
+        problems.append(
+            f"experiências diferentes: {[e.company for e in a]} x {[e.company for e in b]}"
+        )
+    for ea, eb in zip(a, b, strict=False):
+        ids_a, ids_b = [x.id for x in ea.bullets], [x.id for x in eb.bullets]
+        if ids_a != ids_b:
+            missing = sorted(set(ids_a) - set(ids_b))
+            extra = sorted(set(ids_b) - set(ids_a))
+            detail = "ordem diferente" if not (missing or extra) else ""
+            if missing:
+                detail += f"faltam {missing} "
+            if extra:
+                detail += f"sobram {extra}"
+            problems.append(f"{ea.company}: bullets não batem ({detail.strip()})")
+        if ea.period != eb.period:
+            problems.append(f"{ea.company}: período {ea.period} x {eb.period}")
+    if len(original.skills) != len(translated.skills):
+        problems.append(
+            f"habilidades: {len(original.skills)} x {len(translated.skills)} na tradução"
+        )
+    return problems
+
+
 def default_cv(cv: CVMaster) -> TailoredCV:
     """CV mestre sem ajuste: usado quando o LLM falha ou a seleção é rejeitada."""
-    return TailoredCV(cv, cv.summary, list(cv.experiences), cv.skills[:MAX_SKILLS])
+    return TailoredCV(cv, cv.summary, list(cv.experiences), list(cv.skills))

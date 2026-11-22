@@ -304,3 +304,18 @@ navegador invisível, tira print e fecha sem enviar. `--job ID` aplica uma vaga 
 
 Medido no formulário real do BTG (prévia): 4 campos preenchidos, CV anexado, 7 sensíveis
 deixados em branco, 11 obrigatórios para o candidato, reCAPTCHA presente.
+
+---
+
+## 14. Acompanhamento ao vivo e CV em inglês (21/11/2026)
+
+- **Primeira rodada acompanhada** em vez de "7 noites seguidas": o usuário escolhe a hora e
+  assiste pela página **Ao vivo** (`/ao-vivo`, HTMX com atualização a cada 2 s, sem React).
+  O pipeline grava etapa, item atual, contadores, fim do limite de LLM e caminho do log na
+  linha do `Run` a cada unidade de trabalho. **Rodar agora** dispara a tarefa agendada (roda
+  fora do processo do painel); **Parar** usa o mesmo `run/STOP` do `off`.
+- **CV em inglês**: `config/cv_master.en.yaml` com os mesmos IDs do mestre (`night-shift cv
+  check` confere). Vaga em inglês → seleção, PDF (títulos e datas em inglês, arquivo `-en.pdf`)
+  e carta em inglês.
+- **CV completo em PDF** para aplicações manuais: `night-shift cv pdf` gera
+  `output/cv/curriculo.pdf` e `output/cv/resume-en.pdf`, com todas as habilidades.

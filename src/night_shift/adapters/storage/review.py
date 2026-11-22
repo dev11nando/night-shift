@@ -110,6 +110,14 @@ class ReviewRepository:
     def recent_runs(self, limit: int = 5) -> Sequence[Run]:
         return self.s.scalars(select(Run).order_by(Run.started_at.desc()).limit(limit)).all()
 
+    def latest_run(self) -> Run | None:
+        return self.s.scalars(select(Run).order_by(Run.id.desc()).limit(1)).first()
+
+    def scored_since(self, since, limit: int = 8) -> Sequence[Score]:
+        """Notas dadas a partir de ``since``, as mais recentes primeiro (feed ao vivo)."""
+        q = self._scored().where(Score.scored_at >= since)
+        return self.s.scalars(q.order_by(Score.scored_at.desc()).limit(limit)).unique().all()
+
     def best_of_run(self, run: Run, limit: int = 5) -> Sequence[Score]:
         """Melhores notas dadas durante uma execução."""
         q = self._scored().where(Score.scored_at >= run.started_at)

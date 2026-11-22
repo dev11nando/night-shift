@@ -4,9 +4,10 @@ from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import NoResultFound
@@ -17,11 +18,15 @@ from night_shift.adapters.storage.models import Job
 from night_shift.adapters.storage.review import ReviewRepository
 from night_shift.domain.enums import ApplicationStatus
 from night_shift.domain.lanes import Lane, manual_reason
+from night_shift.web.live import live_context
 
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
 
 # Abas da Fila: filas de pendentes (por lane) e decididas (por status).
+# Atualizações (a cada 2 s) esperando a tarefa disparada criar a execução nova.
+WAIT_POLLS = 20
+
 LANE_VIEWS = {"manual": Lane.MANUAL, "auto": Lane.AUTO}
 STATUS_VIEWS = {
     "aplicadas": (ApplicationStatus.APPLIED_MANUAL, ApplicationStatus.AUTO_APPLIED),
@@ -72,6 +77,9 @@ def create_app(
     shots_dir: Path | None = None,
     schedule_status: Callable[[], str] | None = None,
     on_turn_off: Callable[[], list[str]] | None = None,
+    logs_dir: Path | None = None,
+    request_stop: Callable[[], None] | None = None,
+    start_run: Callable[[], str] | None = None,
 ) -> FastAPI:
     """``auto_threshold``: nota mínima para uma vaga de fonte de baixo risco ir para a fila
     automática (``automation.auto_apply_min_score`` no profile.yaml)."""
@@ -93,6 +101,8 @@ def create_app(
     def page(request: Request, name: str, repo: ReviewRepository, **ctx) -> HTMLResponse:
         ctx.setdefault("counts", repo.counts())
         ctx.update(card_ctx(repo))
+        ctx.setdefault("can_start", start_run is not None)
+        ctx.setdefault("can_turn_off", on_turn_off is not None)
         return templates.TemplateResponse(request, name, ctx)
 
     @app.get("/", response_class=HTMLResponse)
@@ -205,6 +215,74 @@ def create_app(
             raise HTTPException(404)
         lines = on_turn_off()
         return templates.TemplateResponse(request, "_turned_off.html", {"lines": lines})
+
+    # ---------------------------------------------------------------- ao vivo
+
+    def live(request: Request, repo: ReviewRepository, message: str | None = None):
+        ctx = live_context(repo, logs_dir)
+        ctx.update(
+            card_ctx(repo),
+            message=message,
+            can_stop=request_stop is not None,
+            can_start=start_run is not None,
+        )
+        return ctx
+
+    @app.get("/ao-vivo", response_class=HTMLResponse)
+    def ao_vivo(request: Request, repo: Repo, msg: str | None = None):
+        ctx = live(request, repo, msg)
+        if msg and not ctx["running"]:
+            # Acabou de vir do botão "Buscar vagas": espera a execução nova aparecer.
+            ctx.update(waiting=WAIT_POLLS, waiting_since=ctx["run"].id if ctx["run"] else 0)
+        return page(request, "ao_vivo.html", repo, active="ao-vivo", **ctx)
+
+    @app.post("/buscar")
+    def buscar(request: Request):
+        """Botão "Buscar vagas" do topo: dispara a busca e leva para a página Ao vivo."""
+        if request.headers.get("HX-Request") != "true":
+            raise HTTPException(403, "use o painel")
+        if start_run is None:
+            raise HTTPException(404)
+        msg = start_run()
+        return Response(
+            status_code=204, headers={"HX-Redirect": f"/ao-vivo?{urlencode({'msg': msg})}"}
+        )
+
+    @app.get("/ao-vivo/estado", response_class=HTMLResponse)
+    def ao_vivo_estado(
+        request: Request,
+        repo: Repo,
+        esperando: Annotated[int, Query(ge=0, le=WAIT_POLLS)] = 0,
+        desde: Annotated[int, Query(ge=0)] = 0,
+    ):
+        ctx = live(request, repo)
+        # Depois do "Rodar agora", a tarefa leva alguns segundos para criar o Run novo:
+        # enquanto o último Run for o de antes (id <= desde), continua esperando.
+        if esperando and (ctx["run"] is None or ctx["run"].id <= desde):
+            ctx.update(waiting=esperando - 1, waiting_since=desde)
+        return templates.TemplateResponse(request, "_live.html", ctx)
+
+    @app.post("/ao-vivo/parar", response_class=HTMLResponse)
+    def ao_vivo_parar(request: Request, repo: Repo):
+        if request.headers.get("HX-Request") != "true":
+            raise HTTPException(403, "use o painel")
+        if request_stop is None:
+            raise HTTPException(404)
+        request_stop()
+        msg = "Parada pedida: termina a vaga atual e encerra."
+        return templates.TemplateResponse(request, "_live.html", live(request, repo, msg))
+
+    @app.post("/ao-vivo/iniciar", response_class=HTMLResponse)
+    def ao_vivo_iniciar(request: Request, repo: Repo):
+        if request.headers.get("HX-Request") != "true":
+            raise HTTPException(403, "use o painel")
+        if start_run is None:
+            raise HTTPException(404)
+        msg = start_run()
+        ctx = live(request, repo, msg)
+        if ctx["run"] is None or not ctx["running"]:
+            ctx.update(waiting=WAIT_POLLS, waiting_since=ctx["run"].id if ctx["run"] else 0)
+        return templates.TemplateResponse(request, "_live.html", ctx)
 
     @app.get("/healthz")
     def healthz():

@@ -1,0 +1,87 @@
+<div id="live"{% if running %} hx-get="/ao-vivo/estado" hx-trigger="every 2s" hx-swap="outerHTML"{% elif waiting %} hx-get="/ao-vivo/estado?esperando={{ waiting }}&desde={{ waiting_since }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  {% if waiting and not running %}<p class="live-message">Disparando a rodada… a tela atualiza sozinha.</p>{% endif %}
+  {% if message %}<p class="live-message">{{ message }}</p>{% endif %}
+
+  {% if not run %}
+    <section class="empty">
+      <p>Nenhuma execução ainda.</p>
+      {% if can_start %}
+      <button class="btn primary" hx-post="/ao-vivo/iniciar" hx-target="#live" hx-swap="outerHTML"
+              hx-confirm="Buscar vagas agora? Usa o limite do seu plano Claude.">Buscar vagas</button>
+      {% endif %}
+    </section>
+  {% else %}
+  <section class="run status-{{ run.status }}">
+    <div class="run-head">
+      <h2>Execução #{{ run.id }}</h2>
+      <div class="live-actions">
+        {% if running %}
+          <span class="pulse" aria-hidden="true"></span>
+          <span class="status">rodando</span>
+          {% if can_stop %}
+          <button class="btn danger" hx-post="/ao-vivo/parar" hx-target="#live" hx-swap="outerHTML"
+                  hx-confirm="Parar a execução? Termina a vaga atual e encerra.">Parar</button>
+          {% endif %}
+        {% else %}
+          <span class="status">{{ {'success': 'concluída', 'failed': 'falhou', 'stopped': 'parada'}.get(run.status, run.status) }}</span>
+          {% if can_start %}
+          <button class="btn primary" hx-post="/ao-vivo/iniciar" hx-target="#live" hx-swap="outerHTML"
+                  hx-confirm="Buscar vagas agora? Usa o limite do seu plano Claude.">Buscar vagas</button>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="clocks">
+      <div><span class="muted">início</span><b>{{ run.started_at | local_dt }}</b></div>
+      <div><span class="muted">tempo</span><b>{{ elapsed }}</b></div>
+      {% if remaining %}<div><span class="muted">limite de LLM acaba em</span><b>{{ remaining }}</b></div>{% endif %}
+    </div>
+
+    <ol class="stepper">
+      {% for st in stages %}<li class="{{ st.state }}">{{ st.label }}</li>{% endfor %}
+    </ol>
+
+    {% if running and run.current_item %}
+      <p class="current"><span class="muted">agora:</span> {{ run.current_item }}</p>
+    {% endif %}
+
+    <ul class="counters">
+      {% for label, value in counters %}<li><b>{{ value }}</b><span>{{ label }}</span></li>{% endfor %}
+      <li class="{{ 'bad' if run.errors }}"><b>{{ run.errors | length }}</b><span>erros</span></li>
+    </ul>
+  </section>
+
+  <div class="live-grid">
+    <section>
+      <h2>Notas desta execução</h2>
+      {% for sc in recent %}
+        <div class="mini">
+          <span class="score small {{ sc.llm_score | score_class }}">{{ sc.llm_score }}</span>
+          <div>
+            <b>{{ sc.job.title }}</b>
+            <span class="muted">{{ sc.job.company_name }}{% if lane_of(sc) == 'auto' %} · fila automática{% endif %}</span>
+          </div>
+        </div>
+      {% else %}
+        <p class="muted">Nenhuma nota ainda.</p>
+      {% endfor %}
+    </section>
+
+    <section>
+      <h2>Log <span class="muted">(mais recente primeiro)</span></h2>
+      {% if log_lines %}
+        <pre class="log">{% for line in log_lines | reverse %}{{ line }}
+{% endfor %}</pre>
+      {% else %}
+        <p class="muted">Sem log desta execução.</p>
+      {% endif %}
+      {% if run.errors %}
+        <details class="errors"><summary>{{ run.errors | length }} erro(s)</summary>
+          <ul>{% for e in run.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+        </details>
+      {% endif %}
+    </section>
+  </div>
+  {% endif %}
+</div>

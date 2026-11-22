@@ -154,3 +154,7 @@ class Run(Base):
     status: Mapped[RunStatus] = mapped_column(str_enum(RunStatus), default=RunStatus.RUNNING)
     stats: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     errors: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Progresso ao vivo (página /ao-vivo): o que está sendo feito agora e até quando.
+    current_item: Mapped[str | None] = mapped_column(String(300))
+    budget_ends_at: Mapped[datetime | None]
+    log_path: Mapped[str | None] = mapped_column(String(500))

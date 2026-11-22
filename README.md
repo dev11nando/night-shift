@@ -52,10 +52,33 @@ uv run night-shift rank --top 10       # só similaridade + nota
 uv run night-shift rank --rescore      # reavalia vagas sem decisão (ex.: depois de mudar o prompt)
 uv run night-shift docs -n 5          # CV ajustado (output/cv/*.pdf) + carta para as melhores
 uv run night-shift docs --regenerate   # gera de novo para as vagas da fila (ex.: mudou o CV)
-uv run night-shift serve --open        # painel em http://127.0.0.1:8765 (Hoje, Fila, Mercado)
+uv run night-shift serve --open        # painel em http://127.0.0.1:8765 (Hoje, Ao vivo, Fila, Mercado)
 uv run night-shift jobs -n 20          # melhores vagas avaliadas, no terminal
 uv run night-shift db enrich           # extrai nível/contrato/salário de vagas antigas
 uv run night-shift companies probe nubank stone   # descobre o ATS de uma empresa
+```
+
+### Currículo
+
+```powershell
+uv run night-shift cv check            # confere se o cv_master.en.yaml bate com o mestre
+uv run night-shift cv pdf              # output/cv/curriculo.pdf e output/cv/resume-en.pdf
+```
+
+O CV mestre fica em `config/cv_master.yaml`; a versão em inglês, opcional, em
+`config/cv_master.en.yaml`, com os mesmos IDs de bullet. Vaga em inglês recebe CV e carta
+em inglês.
+
+### Acompanhar uma rodada
+
+No topo de todas as páginas do painel há **Buscar vagas** (dispara uma busca na hora, mesmo
+com a busca automática desligada) e **Desligar** (encerra tudo). A página **Ao vivo** mostra a
+execução em andamento: etapa, vaga atual, contadores, notas saindo, log e tempo restante do
+limite de LLM, atualizando a cada 2 s, com botão **Parar**.
+
+```powershell
+uv run night-shift schedule disable    # desliga só a busca automática diária
+uv run night-shift schedule enable     # religa
 ```
 
 ### Aplicar (assistido)
