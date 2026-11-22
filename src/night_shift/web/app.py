@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -14,6 +14,9 @@ from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session, sessionmaker
 
 from night_shift import __version__
+from night_shift.adapters.storage.funnel import REJECTED as FUNNEL_REJECTED
+from night_shift.adapters.storage.funnel import STAGES as FUNNEL_STAGES
+from night_shift.adapters.storage.funnel import FunnelRepository
 from night_shift.adapters.storage.models import Job
 from night_shift.adapters.storage.outreach import OutreachRepository
 from night_shift.adapters.storage.review import ReviewRepository
@@ -74,7 +77,24 @@ def gmail_compose(to: str, subject: str, body: str) -> str:
     return f"https://mail.google.com/mail/?{query}"
 
 
+STATUS_LABELS = {
+    "queued": "na fila",
+    "applied_manual": "aplicada",
+    "auto_applied": "aplicada (night-shift)",
+    "replied": "resposta",
+    "interview": "entrevista",
+    "offer": "proposta",
+    "rejected": "recusada",
+    "discarded": "descartada",
+}
+
+
+def status_label(status) -> str:
+    return STATUS_LABELS.get(str(status), str(status))
+
+
 templates.env.globals.update(
+    status_label=status_label,
     duration=duration,
     version=__version__,
     gmail_compose=gmail_compose,
@@ -228,6 +248,49 @@ def create_app(
             raise HTTPException(404, "mensagem não encontrada") from e
         ctx = {"o": row, "counts": repo.counts(), "oob": True, **card_ctx(repo)}
         return templates.TemplateResponse(request, "_outreach_card.html", ctx)
+
+    # ------------------------------------------------------------------ funil
+
+    def board_ctx(repo: ReviewRepository) -> dict:
+        frepo = FunnelRepository(repo.s)
+        board = frepo.board()
+        sent, replied = frepo.outreach_stats()
+        job_ids = [app.job_id for apps in board.values() for app in apps]
+        return {
+            "board": board,
+            "stages": FUNNEL_STAGES,
+            "all_stages": [*FUNNEL_STAGES, FUNNEL_REJECTED],
+            "conversions": frepo.conversions(),
+            "notes": frepo.notes(job_ids),
+            "outreach_sent": sent,
+            "outreach_replied": replied,
+        }
+
+    @app.get("/funil", response_class=HTMLResponse)
+    def funil(request: Request, repo: Repo):
+        return page(request, "funil.html", repo, active="funil", **board_ctx(repo))
+
+    @app.post("/funil/{job_id}/mover/{to}", response_class=HTMLResponse)
+    def funil_mover(request: Request, repo: Repo, job_id: int, to: str):
+        if request.headers.get("HX-Request") != "true":
+            raise HTTPException(403, "use o painel")
+        try:
+            FunnelRepository(repo.s).move(job_id, to)
+        except (KeyError, NoResultFound) as e:
+            raise HTTPException(404, "candidatura ou etapa não encontrada") from e
+        return templates.TemplateResponse(request, "_board.html", board_ctx(repo))
+
+    @app.post("/jobs/{job_id}/notas", response_class=HTMLResponse)
+    def anotar(request: Request, repo: Repo, job_id: int, texto: Annotated[str, Form()]):
+        if request.headers.get("HX-Request") != "true":
+            raise HTTPException(403, "use o painel")
+        if not texto.strip() or len(texto) > 2000:
+            raise HTTPException(422, "anotação vazia ou longa demais")
+        try:
+            FunnelRepository(repo.s).add_note(job_id, texto)
+        except NoResultFound as e:
+            raise HTTPException(404, "vaga não encontrada") from e
+        return templates.TemplateResponse(request, "_board.html", board_ctx(repo))
 
     @app.get("/mercado", response_class=HTMLResponse)
     def mercado(request: Request, repo: Repo):
