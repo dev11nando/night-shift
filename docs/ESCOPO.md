@@ -341,3 +341,22 @@ imprensa, suporte, vendas), 64 têm página de carreiras e 85 têm descrição. 
   recrutadores da empresa no LinkedIn, página de carreiras, **Abrir no Gmail** com tudo
   preenchido (você anexa o CV e envia), **Marcar enviada**, **Descartar**, **Responderam**.
   Nada sai sozinho. A API do Gmail ficou para depois, se o volume de e-mail crescer.
+
+---
+
+## 16. Perfis de CV por stack (Fase 8, 22/11/2026)
+
+- Três perfis, cada um com PT e EN: **Python backend** (`cv_master`), **IA/LLM** (`cv_ia`) e
+  **Java** (`cv_java`, só júnior, com foco em Programação Orientada a Objetos e o projeto de
+  conclusão da SPTech: monitoramento de hardware para totens, em Java com Spring Boot).
+- Classificação da vaga (`domain/stacks.py`): o título manda; na descrição só contam sinais
+  fortes de IA (LLM, IA generativa, machine learning, RAG, agentes), porque muita empresa cita
+  "IA" de passagem. Sem pista, perfil Python.
+- Filtro com níveis por stack (`preferences.stack_levels`); "java" saiu dos termos bloqueados
+  e "c#" entrou. Similaridade (palavras-chave do próprio perfil), nota (prompt com os níveis
+  da stack), CV ajustado e carta usam o perfil da vaga.
+- PDF sempre em uma página (reduz fonte até 82%, depois tira cursos e bullets finais).
+- `rank --rescreen` reclassifica e refaz o filtro das vagas cortadas.
+- Medido: das 1.379 vagas, 131 IA, 78 Java e 1.170 Python; passaram no filtro 13 IA, 12 Java
+  júnior e 36 Python. As primeiras Java júnior levaram 55–58: o Haiku pesa que o Java é
+  acadêmico e a vaga pede Java profissional, avaliação honesta.

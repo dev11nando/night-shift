@@ -5,7 +5,7 @@ usando um LLM (Claude Haiku pela sua assinatura, ou Ollama local), prepara CV aj
 para as melhores, separa o que dá para aplicar sozinho do que precisa de você e rascunha e-mails
 de apresentação para empresas-alvo.
 
-> Status: **Fase 7 (funil)**. Veja o [escopo do MVP](docs/ESCOPO.md).
+> Status: **Fase 8 (perfis de CV por stack)**. Veja o [escopo do MVP](docs/ESCOPO.md).
 
 ## Ideia em uma linha
 
@@ -58,16 +58,25 @@ uv run night-shift db enrich           # extrai nível/contrato/salário de vaga
 uv run night-shift companies probe nubank stone   # descobre o ATS de uma empresa
 ```
 
-### Currículo
+### Currículo (perfis por stack)
 
 ```powershell
-uv run night-shift cv check            # confere se o cv_master.en.yaml bate com o mestre
-uv run night-shift cv pdf              # output/cv/curriculo.pdf e output/cv/resume-en.pdf
+uv run night-shift cv check            # confere cada perfil e a versão em inglês
+uv run night-shift cv pdf              # output/cv/curriculo-<perfil>.pdf e resume-<perfil>-en.pdf
+uv run night-shift rank --rescreen     # reclassifica a stack das vagas e refaz o filtro
 ```
 
-O CV mestre fica em `config/cv_master.yaml`; a versão em inglês, opcional, em
-`config/cv_master.en.yaml`, com os mesmos IDs de bullet. Vaga em inglês recebe CV e carta
-em inglês.
+Três perfis de CV, cada um com versão em inglês e sempre em **uma página**:
+
+| Perfil | Arquivo | Níveis aceitos |
+|---|---|---|
+| Python backend | `config/cv_master.yaml` | júnior e pleno |
+| IA / LLM | `config/cv_ia.yaml` | júnior e pleno |
+| Java (foco em POO) | `config/cv_java.yaml` | só júnior |
+
+Cada vaga é classificada numa stack pelo título (e, sem pista no título, pela descrição); a
+nota, o CV ajustado e a carta usam o perfil dela. Níveis por stack em
+`preferences.stack_levels` do `profile.yaml`. Vaga em inglês recebe CV e carta em inglês.
 
 ### Acompanhar uma rodada
 
