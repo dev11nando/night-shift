@@ -66,6 +66,14 @@ class Preferences(BaseModel):
     blocked_keywords: list[str] = Field(
         default=[], description="Título com qualquer uma é cortado."
     )
+    stack_levels: dict[str, list[Level]] = Field(
+        default={
+            "python": [Level.JUNIOR, Level.PLENO],
+            "ia": [Level.JUNIOR, Level.PLENO],
+            "java": [Level.JUNIOR],
+        },
+        description="Níveis aceitos por stack; stack fora daqui usa `levels`.",
+    )
     gupy_search_terms: list[str] = ["python", "backend python", "desenvolvedor python", "fastapi"]
 
 

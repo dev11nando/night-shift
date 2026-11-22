@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import datetime
 
 from sqlalchemy import exists, select
@@ -23,6 +24,7 @@ def to_posting(job: Job) -> JobPosting:
         work_model=job.work_model,
         contract=job.contract,
         level=job.level,
+        stack=job.stack,
         salary_min=job.salary_min,
         salary_max=job.salary_max,
         published_at=job.published_at,
@@ -77,6 +79,7 @@ class JobRepository:
                 work_model=posting.work_model,
                 contract=posting.contract,
                 level=posting.level,
+                stack=posting.stack,
                 salary_min=posting.salary_min,
                 salary_max=posting.salary_max,
                 url=posting.url,
@@ -91,8 +94,9 @@ class JobRepository:
         mudaram. Útil depois de melhorar a extração."""
         changed = 0
         for job in self.s.scalars(select(Job)):
-            enriched = enrich(to_posting(job))
-            fields = ("level", "contract", "salary_min", "salary_max")
+            # stack=None: reclassifica (o classificador pode ter mudado).
+            enriched = enrich(replace(to_posting(job), stack=None))
+            fields = ("level", "contract", "salary_min", "salary_max", "stack")
             if any(getattr(job, f) != getattr(enriched, f) for f in fields):
                 for f in fields:
                     setattr(job, f, getattr(enriched, f))
@@ -129,6 +133,13 @@ class JobRepository:
     ) -> None:
         score.llm_score, score.rationale = value, rationale
         score.red_flags, score.model, score.scored_at = red_flags, model, utcnow()
+
+    def reset_screening(self) -> int:
+        """Apaga o resultado do filtro das vagas que foram cortadas, para filtrar de novo."""
+        cut = self.s.scalars(select(Score).where(Score.filter_reason.is_not(None))).all()
+        for sc in cut:
+            self.s.delete(sc)
+        return len(cut)
 
     def reset_llm_scores(self) -> int:
         """Apaga as notas do LLM de vagas ainda sem decisão, para reavaliar (ex.: depois de

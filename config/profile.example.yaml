@@ -16,8 +16,12 @@ preferences:
       clt_min: 3500
   # título precisa ter ao menos uma (omitir = padrão: backend, software, python, engineer...)
   # title_keywords: [backend, python, software engineer]
-  keywords: [python, fastapi, django, flask, aws, llm, ia, ai]   # título ou descrição
-  blocked_keywords: [php, .net, java, golang, ruby, frontend, front-end, data analyst]
+  keywords: [python, fastapi, django, flask, aws, llm, ia, ai, java, spring]   # título ou descrição
+  blocked_keywords: [php, .net, c#, golang, ruby, frontend, front-end, data analyst]
+  stack_levels:                       # níveis aceitos por stack de CV
+    python: [junior, pleno]
+    ia: [junior, pleno]
+    java: [junior]                    # Java só júnior
   gupy_search_terms: [python, backend python, desenvolvedor python, fastapi, engenheiro de software python]
 
 automation:
