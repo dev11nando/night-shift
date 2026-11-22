@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import JSON, Enum, ForeignKey, MetaData, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Enum, ForeignKey, MetaData, String, Text, UniqueConstraint, event
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from night_shift.domain.enums import (
@@ -132,6 +132,40 @@ class Application(Base):
     updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
 
     job: Mapped[Job] = relationship(back_populates="application")
+    events: Mapped[list["ApplicationEvent"]] = relationship(
+        back_populates="application", order_by="ApplicationEvent.at", cascade="all, delete-orphan"
+    )
+
+
+class ApplicationEvent(Base):
+    """Cada mudança de etapa de uma candidatura (para o funil e a linha do tempo)."""
+
+    __tablename__ = "application_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id"), index=True)
+    status: Mapped[ApplicationStatus] = mapped_column(str_enum(ApplicationStatus))
+    at: Mapped[datetime] = mapped_column(default=utcnow)
+
+    application: Mapped[Application] = relationship(back_populates="events")
+
+
+@event.listens_for(Application.status, "set")
+def _record_status_change(target: Application, value, oldvalue, _initiator) -> None:
+    """Toda troca de status vira um evento, venha de onde vier (painel, apply, CLI)."""
+    if value is not None and value != oldvalue:
+        target.events.append(ApplicationEvent(status=value, at=utcnow()))
+
+
+class JobNote(Base):
+    """Anotação sua sobre uma vaga ("falei com fulano", "entrevista dia 5")."""
+
+    __tablename__ = "job_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
 class Outreach(Base):
