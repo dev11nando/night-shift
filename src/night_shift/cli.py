@@ -242,7 +242,21 @@ def _collect_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline):
     ]
 
 
-def _llm_and_embedder(llm_cfg: LLMConfig, cv_text: str):
+def _cv_by_stack(paths: ProjectPaths, lang: str = "pt") -> dict:
+    """{stack: CVMaster} dos perfis que existem (python sempre, pelo cv_master)."""
+    cvs = {}
+    for stack in STACK_FILES:
+        file = paths.cv_profile_file(stack, lang)
+        if file.exists():
+            cvs[stack] = _load_or_exit(load_cv, file)
+    if lang == "pt" and "python" not in cvs:
+        cvs["python"] = _load_or_exit(load_cv, paths.cv_file)  # mensagem de erro clara
+    return cvs
+
+
+def _llm_and_embedder(llm_cfg: LLMConfig):
+    """LLM de nota e embedder. No modo claude, o embedder é uma fábrica: cada perfil de
+    stack ganha um vocabulário de palavras-chave tirado do próprio CV."""
     if llm_cfg.provider == "ollama":
         return (
             OllamaLLM(llm_cfg.ollama_url, llm_cfg.local_model, think=llm_cfg.think),
@@ -250,7 +264,7 @@ def _llm_and_embedder(llm_cfg: LLMConfig, cv_text: str):
         )
     return (
         ClaudeCLI(llm_cfg.claude_model, executable=llm_cfg.claude_executable),
-        KeywordEmbedder(cv_text),
+        KeywordEmbedder,
     )
 
 
@@ -261,17 +275,17 @@ def _rank_steps(
     top: int | None,
     budget_minutes: int | None,
 ):
-    cv_text = _load_or_exit(load_cv, paths.cv_file).as_text()
+    cv_texts = {stack: cv.as_text() for stack, cv in _cv_by_stack(paths).items()}
     llm_cfg = profile.llm
-    llm, embedder = _llm_and_embedder(llm_cfg, cv_text)
+    llm, embedder = _llm_and_embedder(llm_cfg)
     minutes = budget_minutes or llm_cfg.time_budget_minutes
     return [
         lambda: pipeline.screen(HardFilter(profile.preferences)),
-        lambda: pipeline.embed_rank(embedder, cv_text),
+        lambda: pipeline.embed_rank(embedder, cv_texts),
         lambda: pipeline.llm_score(
             llm,
             profile,
-            cv_text,
+            cv_texts,
             top or llm_cfg.rank_top_n,
             budget_seconds=minutes * 60 if minutes else None,
         ),
@@ -279,7 +293,8 @@ def _rank_steps(
 
 
 def _docs_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline, limit: int | None):
-    cv = _load_or_exit(load_cv, paths.cv_file)
+    cv = _cv_by_stack(paths)
+    cv_en = _cv_by_stack(paths, "en") or None
     llm_cfg = profile.llm
     if llm_cfg.provider == "ollama":
         llm = OllamaLLM(llm_cfg.ollama_url, llm_cfg.local_model, think=llm_cfg.think)
@@ -300,7 +315,7 @@ def _docs_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline, limit
             llm_cfg.documents_min_score,
             limit or llm_cfg.claude_daily_letters,
             budget_seconds=minutes * 60 if minutes else None,
-            cv_en=load_cv(paths.cv_en_file) if paths.cv_en_file.exists() else None,
+            cv_en=cv_en,
         )
     ]
 
@@ -324,8 +339,19 @@ def rank(
     rescore: bool = typer.Option(
         False, "--rescore", help="Apaga as notas de vagas sem decisão e avalia de novo."
     ),
+    rescreen: bool = typer.Option(
+        False,
+        "--rescreen",
+        help="Reclassifica a stack de todas as vagas e refaz o filtro das que foram cortadas "
+        "(ex.: depois de mudar níveis por stack ou termos bloqueados).",
+    ),
 ) -> None:
     """Ordena as vagas filtradas pela semelhança com o CV e dá nota às melhores com o LLM."""
+    if rescreen:
+        with _pipeline(_paths()).sessions.begin() as s:
+            repo = JobRepository(s)
+            typer.echo(f"{repo.enrich_existing()} vaga(s) com nível/contrato/stack atualizados")
+            typer.echo(f"{repo.reset_screening()} vaga(s) cortada(s) voltam para o filtro")
     if rescore:
         with _pipeline(_paths()).sessions.begin() as s:
             typer.echo(f"{JobRepository(s).reset_llm_scores()} nota(s) apagada(s) para reavaliar")

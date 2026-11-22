@@ -46,11 +46,24 @@ from night_shift.domain.enrich import enrich
 from night_shift.domain.enums import RunStatus
 from night_shift.domain.filters import HardFilter
 from night_shift.domain.job import JobPosting
+from night_shift.domain.stacks import DEFAULT_STACK
 from night_shift.domain.text import fold
 from night_shift.ports import Embedder, JobSource, LLMProvider, LLMUnavailable, SourceError
 from night_shift.runtime.stop_flag import StopFlag
 
 EMBED_BATCH = 16
+
+
+def per_stack[T](value: T | dict[str, T]) -> dict[str, T]:
+    """Um valor só vira o perfil padrão; um dict já é ``{stack: valor}``."""
+    return value if isinstance(value, dict) else {DEFAULT_STACK: value}
+
+
+def pick[T](values: dict[str, T], stack: str | None) -> T:
+    """Valor do perfil da stack, ou o do perfil padrão (ou o primeiro que houver)."""
+    if stack in values:
+        return values[stack]
+    return values.get(DEFAULT_STACK) or next(iter(values.values()))
 
 
 def slugify(text: str) -> str:
@@ -149,29 +162,45 @@ class Pipeline:
             f"{self.stats.get('filtered_out', 0)} cortadas"
         )
 
-    def embed_rank(self, embedder: Embedder, cv_text: str) -> None:
-        self.log(f"similaridade ({embedder.model})")
+    def embed_rank(
+        self,
+        embedder: Embedder | Callable[[str], Embedder],
+        cv_text: str | dict[str, str],
+    ) -> None:
+        """Compara cada vaga com o CV do perfil da stack dela. ``embedder`` pode ser um só
+        para todos ou uma fábrica que recebe o texto do CV (ex.: palavras-chave do perfil)."""
+        texts = per_stack(cv_text)
+        self.log("similaridade")
         self._progress("similaridade")
         with self.sessions() as s:
-            pending_ids = [sc.id for sc in JobRepository(s).needing_similarity()]
-        if not pending_ids:
+            pending = [(sc.id, sc.job.stack) for sc in JobRepository(s).needing_similarity()]
+        if not pending:
             return
-        [cv_vec] = embedder.embed([cv_text])
-        for i in range(0, len(pending_ids), EMBED_BATCH):
-            self._check_stop()
-            with self.sessions.begin() as s:
-                batch = [s.get_one(Score, sid) for sid in pending_ids[i : i + EMBED_BATCH]]
-                vectors = embedder.embed([job_text(to_posting(sc.job)) for sc in batch])
-                for sc, vec in zip(batch, vectors, strict=True):
-                    sc.embed_similarity = cosine(cv_vec, vec)
-            self._count("embedded", len(batch))
-        self.log(f"  {len(pending_ids)} vagas comparadas com o CV")
+        groups: dict[str, list[int]] = {}
+        for sid, stack in pending:
+            groups.setdefault(stack if stack in texts else DEFAULT_STACK, []).append(sid)
+        for stack, ids in groups.items():
+            text = texts.get(stack) or texts[DEFAULT_STACK]
+            # Classe ou função = fábrica (um embedder por perfil); objeto pronto = um para todos.
+            is_factory = isinstance(embedder, type) or not hasattr(embedder, "embed")
+            emb = embedder(text) if is_factory else embedder
+            [cv_vec] = emb.embed([text])
+            for i in range(0, len(ids), EMBED_BATCH):
+                self._check_stop()
+                with self.sessions.begin() as s:
+                    batch = [s.get_one(Score, sid) for sid in ids[i : i + EMBED_BATCH]]
+                    vectors = emb.embed([job_text(to_posting(sc.job)) for sc in batch])
+                    for sc, vec in zip(batch, vectors, strict=True):
+                        sc.embed_similarity = cosine(cv_vec, vec)
+                self._count("embedded", len(batch))
+        detail = ", ".join(f"{len(ids)} {stack}" for stack, ids in groups.items())
+        self.log(f"  {len(pending)} vagas comparadas com o CV ({detail})")
 
     def llm_score(
         self,
         llm: LLMProvider,
         profile: Profile,
-        cv_text: str,
+        cv_text: str | dict[str, str],
         top_n: int,
         budget_seconds: float | None = None,
     ) -> None:
@@ -195,7 +224,9 @@ class Pipeline:
                 job = to_posting(sc.job)
                 try:
                     fit = llm.complete_json(
-                        SYSTEM_PROMPT, build_prompt(profile, cv_text, job), JobFit
+                        SYSTEM_PROMPT,
+                        build_prompt(profile, pick(per_stack(cv_text), job.stack), job),
+                        JobFit,
                     )
                 except LLMUnavailable:
                     raise
@@ -212,13 +243,13 @@ class Pipeline:
         self,
         llm: LLMProvider,
         profile: Profile,
-        cv: CVMaster,
+        cv: CVMaster | dict[str, CVMaster],
         render: Callable[[TailoredCV, Path, str], Path],
         out_dir: Path,
         min_score: int,
         limit: int,
         budget_seconds: float | None = None,
-        cv_en: CVMaster | None = None,
+        cv_en: CVMaster | dict[str, CVMaster] | None = None,
     ) -> None:
         """CV ajustado (PDF) e carta para as melhores vagas da fila que ainda não têm.
 
@@ -241,7 +272,9 @@ class Pipeline:
             self._progress("documentos", f"[{n}/{len(ids)}] {job.title} — {job.company_name}")
 
             lang = job_language(job)
-            base, doc_lang = (cv_en, "en") if lang == "en" and cv_en else (cv, "pt")
+            cv_pt = pick(per_stack(cv), job.stack)
+            en = pick(per_stack(cv_en), job.stack) if cv_en else None
+            base, doc_lang = (en, "en") if lang == "en" and en else (cv_pt, "pt")
             tailored = self._tailor(llm, base, job, doc_lang)
             name = f"{job_id}-{slugify(job.company_name)}{'-en' if doc_lang == 'en' else ''}.pdf"
             pdf = render(tailored, out_dir / name, doc_lang)
