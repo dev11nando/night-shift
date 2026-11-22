@@ -37,7 +37,7 @@ class PoliteClient:
         try:
             resp = self._client.get(url, params=params or None)
             resp.raise_for_status()
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, ValueError) as e:  # ValueError: URL malformada
             raise SourceError(f"GET {url}: {e}") from e
         return resp
 

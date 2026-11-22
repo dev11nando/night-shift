@@ -14,6 +14,7 @@
       <a href="/" class="{{ 'active' if active == 'hoje' }}">Hoje</a>
       <a href="/ao-vivo" class="{{ 'active' if active == 'ao-vivo' }}">Ao vivo</a>
       <a href="/fila" class="{{ 'active' if active == 'fila' }}">Fila {% include "_queue_count.html" %}</a>
+      <a href="/outreach" class="{{ 'active' if active == 'outreach' }}">Outreach{% if ocounts and ocounts.get('draft') %} <span class="pill">{{ ocounts.get('draft') }}</span>{% endif %}</a>
       <a href="/mercado" class="{{ 'active' if active == 'mercado' }}">Mercado</a>
     </nav>
     <div class="top-actions">
@@ -31,5 +32,12 @@
     {% block content %}{% endblock %}
   </main>
   <footer>v{{ version }} · dados locais em data/night-shift.db</footer>
+<script>
+function copyText(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).innerText).then(() => {
+    const old = btn.textContent; btn.textContent = 'Copiado'; setTimeout(() => btn.textContent = old, 1500);
+  });
+}
+</script>
 </body>
 </html>

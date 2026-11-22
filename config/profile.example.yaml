@@ -40,7 +40,7 @@ llm:
   ollama_url: http://localhost:11434
   think: false                        # raciocínio estendido do qwen3: lento e desnecessário aqui
   claude_daily_letters: 10
-  claude_daily_outreach: 5
+  claude_daily_outreach: 10          # mensagens de outreach por dia (você envia)
 
 application:                          # night-shift apply (aplicação assistida)
   current_company: null               # campo "empresa atual"; null = deixa para você

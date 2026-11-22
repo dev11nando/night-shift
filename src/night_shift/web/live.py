@@ -13,6 +13,8 @@ STAGES = [
     ("similaridade", "Similaridade"),
     ("nota", "Nota do LLM"),
     ("documentos", "CV e carta"),
+    ("contatos", "Contatos"),
+    ("outreach", "Outreach"),
 ]
 
 COUNTERS = [
@@ -21,6 +23,7 @@ COUNTERS = [
     ("passed_filter", "passaram no filtro"),
     ("llm_scored", "com nota"),
     ("documents", "CV + carta"),
+    ("outreach", "mensagens de outreach"),
     ("llm_deferred", "ficaram p/ depois"),
 ]
 

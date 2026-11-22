@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Outreach · night-shift{% endblock %}
+{% block content %}
+<div class="section-head">
+  <h1>Outreach</h1>
+  <div class="tabs">
+    <a href="/outreach" class="{{ 'active' if view == 'pendentes' }}">Para enviar ({{ ocounts.get('draft', 0) }})</a>
+    <a href="/outreach?view=enviadas" class="{{ 'active' if view == 'enviadas' }}">Enviadas ({{ ocounts.get('sent', 0) + ocounts.get('replied', 0) }})</a>
+    <a href="/outreach?view=descartadas" class="{{ 'active' if view == 'descartadas' }}">Descartadas ({{ ocounts.get('discarded', 0) }})</a>
+  </div>
+</div>
+
+{% if view == 'pendentes' %}
+<p class="lane-help">Mensagens para empresas sem vaga aberta. Pelo <b>LinkedIn</b>: abra a busca, escolha alguém de
+recrutamento ou liderança técnica, conecte com a nota pronta e marque como enviada. Por <b>e-mail</b>, quando a empresa
+publica uma caixa de RH: abra no Gmail, anexe <code>output/cv/curriculo.pdf</code> e envie. Nada sai sozinho.</p>
+{% endif %}
+
+{% for o in items %}
+  {% include "_outreach_card.html" %}
+{% else %}
+  <section class="empty">
+    {% if view == 'pendentes' %}
+      <p>Nenhuma mensagem para enviar.</p>
+      <p class="muted">Elas são escritas na busca (até {{ daily_limit }} por dia) ou com <code>night-shift outreach</code>.</p>
+    {% else %}
+      <p>Nada aqui ainda.</p>
+    {% endif %}
+  </section>
+{% endfor %}
+{% endblock %}
