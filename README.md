@@ -5,7 +5,7 @@ usando um LLM (Claude Haiku pela sua assinatura, ou Ollama local), prepara CV aj
 para as melhores, separa o que dá para aplicar sozinho do que precisa de você e rascunha e-mails
 de apresentação para empresas-alvo.
 
-> Status: **Fase 6 (outreach)**. Veja o [escopo do MVP](docs/ESCOPO.md).
+> Status: **Fase 7 (funil)**. Veja o [escopo do MVP](docs/ESCOPO.md).
 
 ## Ideia em uma linha
 
@@ -90,6 +90,12 @@ uv run night-shift outreach -n 10     # acha contatos públicos e escreve as men
 A aba **Outreach** do painel mostra, por empresa, a nota de conexão do LinkedIn e o e-mail
 prontos, o link para achar recrutadores no LinkedIn e a página de carreiras. Você envia
 (LinkedIn ou "Abrir no Gmail") e marca como enviada. Também roda na busca de cada noite.
+
+### Funil
+
+A aba **Funil** mostra suas candidaturas da aplicação até a proposta, com a % de passagem
+entre as etapas (no total e por fonte). Mova cada card conforme o processo anda (teve
+resposta, entrevista, proposta, recusada) e anote o que aconteceu direto no card.
 
 ### Aplicar (assistido)
 
