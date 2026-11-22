@@ -4,6 +4,9 @@ from pathlib import Path
 
 HOME_ENV = "NIGHT_SHIFT_HOME"
 
+# Perfis de CV por stack → arquivo base em config/ (python é o CV mestre original).
+STACK_FILES = {"python": "cv_master", "ia": "cv_ia", "java": "cv_java"}
+
 
 @dataclass(frozen=True)
 class ProjectPaths:
@@ -65,6 +68,11 @@ class ProjectPaths:
     @property
     def companies_file(self) -> Path:
         return self.config_dir / "companies.yaml"
+
+    def cv_profile_file(self, stack: str, lang: str = "pt") -> Path:
+        """CV de um perfil de stack: python usa o cv_master; os outros, cv_<stack>."""
+        base = STACK_FILES[stack]
+        return self.config_dir / (f"{base}.en.yaml" if lang == "en" else f"{base}.yaml")
 
     @property
     def cv_en_file(self) -> Path:

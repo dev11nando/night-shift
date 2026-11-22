@@ -177,6 +177,15 @@ class Experience(BaseModel):
     bullets: list[Bullet] = []
 
 
+class Project(BaseModel):
+    """Projeto acadêmico ou pessoal (ex.: TCC), com bullets como uma experiência."""
+
+    name: str
+    context: str | None = Field(default=None, description="Ex.: 'Projeto de conclusão · SPTech'")
+    period: str | None = None
+    bullets: list[Bullet] = []
+
+
 class Education(BaseModel):
     school: str
     course: str
@@ -200,6 +209,7 @@ class CVMaster(BaseModel):
     contact: Contact = Contact()
     summary: str = ""
     experiences: list[Experience] = []
+    projects: list[Project] = []
     education: list[Education] = []
     courses: list[str] = []
     skills: list[str] = []
@@ -211,6 +221,9 @@ class CVMaster(BaseModel):
         for exp in self.experiences:
             lines.append(f"\n{exp.role} — {exp.company} ({exp.period})")
             lines += [f"- {b.text}" for b in exp.bullets]
+        for proj in self.projects:
+            lines.append(f"\nProjeto: {proj.name}" + (f" ({proj.context})" if proj.context else ""))
+            lines += [f"- {b.text}" for b in proj.bullets]
         if self.skills:
             lines.append("\nHabilidades: " + ", ".join(self.skills))
         for ed in self.education:

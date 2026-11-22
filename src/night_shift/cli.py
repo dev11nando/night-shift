@@ -11,7 +11,7 @@ import typer
 from night_shift import __version__
 from night_shift.adapters.llm.claude_cli import ClaudeCLI, find_executable
 from night_shift.adapters.llm.ollama import OllamaEmbedder, OllamaLLM
-from night_shift.adapters.render.cv_pdf import render_cv_pdf
+from night_shift.adapters.render.cv_pdf import page_count, render_cv_pdf, render_cv_pdf_info
 from night_shift.adapters.scheduler.windows_task import ON_DEMAND_TASK, WindowsTaskScheduler
 from night_shift.adapters.sources import build_sources
 from night_shift.adapters.sources.ats import ATS_SOURCES
@@ -36,7 +36,7 @@ from night_shift.config import (
 from night_shift.domain.cv import default_cv, translation_problems
 from night_shift.domain.enums import RunStatus
 from night_shift.domain.filters import HardFilter
-from night_shift.paths import ProjectPaths
+from night_shift.paths import STACK_FILES, ProjectPaths
 from night_shift.ports import SourceError
 from night_shift.runtime.job_object import IS_WINDOWS, is_store_python
 from night_shift.runtime.lifecycle import enter_managed_process, running_pipeline
@@ -757,40 +757,70 @@ def shortcuts() -> None:
         typer.echo(f"criado: {path}")
 
 
+def _cv_profiles(paths: ProjectPaths) -> list[tuple[str, Path, Path]]:
+    """(stack, arquivo PT, arquivo EN) dos perfis que existem em config/."""
+    return [
+        (stack, paths.cv_profile_file(stack), paths.cv_profile_file(stack, "en"))
+        for stack in STACK_FILES
+        if paths.cv_profile_file(stack).exists()
+    ]
+
+
 @cv_app.command("check")
 def cv_check() -> None:
-    """Valida o CV mestre e confere se a tradução em inglês bate com ele (mesmos IDs)."""
+    """Valida cada perfil de CV (python, ia, java) e confere se a versão em inglês bate com a
+    em português (mesmas experiências, projetos, IDs de bullet e nº de habilidades)."""
     paths = _paths()
-    cv = _load_or_exit(load_cv, paths.cv_file)
-    bullets = sum(len(e.bullets) for e in cv.experiences)
-    typer.echo(f"cv_master.yaml: {len(cv.experiences)} experiência(s), {bullets} bullets")
-    if not paths.cv_en_file.exists():
-        typer.echo("cv_master.en.yaml: não existe (vagas em inglês usam o CV em português)")
-        return
-    problems = translation_problems(cv, _load_or_exit(load_cv, paths.cv_en_file))
-    if problems:
-        typer.secho("cv_master.en.yaml NÃO bate com o mestre:", fg="red")
-        for p in problems:
-            typer.echo(f"  - {p}")
+    failed = False
+    for stack, pt_file, en_file in _cv_profiles(paths):
+        cv = _load_or_exit(load_cv, pt_file)
+        bullets = sum(len(e.bullets) for e in cv.experiences) + sum(
+            len(p.bullets) for p in cv.projects
+        )
+        typer.echo(f"{stack:7} {pt_file.name}: {bullets} bullets, {len(cv.skills)} habilidades")
+        if not en_file.exists():
+            typer.echo(f"        {en_file.name}: não existe (vaga em inglês usa o PT)")
+            continue
+        problems = translation_problems(cv, _load_or_exit(load_cv, en_file))
+        if problems:
+            failed = True
+            typer.secho(f"        {en_file.name} NÃO bate:", fg="red")
+            for problem in problems:
+                typer.echo(f"          - {problem}")
+        else:
+            typer.echo(f"        {en_file.name}: ok")
+    if failed:
         raise typer.Exit(1)
-    typer.echo("cv_master.en.yaml: ok, mesmos IDs e habilidades")
 
 
 @cv_app.command("pdf")
 def cv_pdf() -> None:
-    """Gera o CV completo (sem ajuste por vaga) em PDF, em português e em inglês, para
-    anexar nas aplicações manuais: output/cv/curriculo.pdf e output/cv/resume-en.pdf."""
+    """Gera o CV completo de cada perfil (python, ia, java), em PT e EN, sempre em uma
+    página, em output/cv/: curriculo-<perfil>.pdf e resume-<perfil>-en.pdf."""
     paths = _paths()
     profile = _load_or_exit(load_profile, paths.profile_file)
-    versions = [("pt", paths.cv_file, "curriculo.pdf")]
-    if paths.cv_en_file.exists():
-        versions.append(("en", paths.cv_en_file, "resume-en.pdf"))
-    for lang, source, filename in versions:
-        cv = _load_or_exit(load_cv, source)
-        out = render_cv_pdf(
-            default_cv(cv), profile.name, profile.email, paths.cv_output_dir / filename, lang
-        )
-        typer.echo(f"gerado: {out}")
+    for stack, pt_file, en_file in _cv_profiles(paths):
+        for lang, source, name in (
+            ("pt", pt_file, f"curriculo-{stack}.pdf"),
+            ("en", en_file, f"resume-{stack}-en.pdf"),
+        ):
+            if not source.exists():
+                continue
+            cv = _load_or_exit(load_cv, source)
+            info = render_cv_pdf_info(
+                default_cv(cv), profile.name, profile.email, paths.cv_output_dir / name, lang
+            )
+            pages = page_count(info.path)
+            notes = []
+            if info.scale < 1:
+                notes.append(f"fonte {info.scale:.0%}")
+            if info.dropped_courses:
+                notes.append("sem a seção de cursos")
+            if info.trimmed_bullets:
+                notes.append(f"{info.trimmed_bullets} bullet(s) a menos")
+            extra = f" ({', '.join(notes)})" if notes else ""
+            warn = "" if pages == 1 else f"  ATENÇÃO: {pages} páginas"
+            typer.echo(f"{name:28} 1 página{extra}{warn}" if pages == 1 else f"{name}{warn}")
 
 
 @companies_app.command("probe")

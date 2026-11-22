@@ -124,6 +124,10 @@ def translation_problems(original: CVMaster, translated: CVMaster) -> list[str]:
             problems.append(f"{ea.company}: bullets não batem ({detail.strip()})")
         if ea.period != eb.period:
             problems.append(f"{ea.company}: período {ea.period} x {eb.period}")
+    pa = [[b.id for b in p.bullets] for p in original.projects]
+    pb = [[b.id for b in p.bullets] for p in translated.projects]
+    if pa != pb:
+        problems.append(f"projetos não batem: {pa} x {pb}")
     if len(original.skills) != len(translated.skills):
         problems.append(
             f"habilidades: {len(original.skills)} x {len(translated.skills)} na tradução"
