@@ -38,10 +38,12 @@ def job_text(job: JobPosting) -> str:
     return f"{job.title}\n{job.title} — {job.company_name}\n\n{job.description[:4000]}"
 
 
-def _preferences_block(profile: Profile) -> str:
+def _preferences_block(profile: Profile, stack: str | None = None) -> str:
     p = profile.preferences
+    levels = p.stack_levels.get(stack or "", p.levels)
+    stack_note = f" para vagas de {stack}" if stack in p.stack_levels else ""
     lines = [
-        f"- Níveis aceitos (em ordem de prioridade): {', '.join(p.levels)}",
+        f"- Níveis aceitos{stack_note} (em ordem de prioridade): {', '.join(levels)}",
         f"- Modelos de trabalho: {', '.join(p.work_models)}",
         f"- Contratos: {', '.join(c.upper() for c in p.contracts)}",
         f"- Presencial/híbrido só em: {', '.join(p.locations)}",
@@ -61,7 +63,7 @@ def build_prompt(profile: Profile, cv_text: str, job: JobPosting) -> str:
 {cv_text}
 
 ## Preferências do candidato
-{_preferences_block(profile)}
+{_preferences_block(profile, job.stack)}
 
 ## Vaga
 Empresa: {job.company_name}

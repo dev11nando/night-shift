@@ -68,8 +68,10 @@ class HardFilter:
                 return FilterResult(False, f"título bloqueado: {term}")
 
         level = job.level or infer_level(title)
-        if level is not None and level not in self.prefs.levels:
-            return FilterResult(False, f"nível {level}")
+        allowed = self.prefs.stack_levels.get(job.stack or "", self.prefs.levels)
+        if level is not None and level not in allowed:
+            suffix = f" para {job.stack}" if job.stack in self.prefs.stack_levels else ""
+            return FilterResult(False, f"nível {level}{suffix}")
 
         if self.prefs.keywords:
             blob = f"{title}\n{job.description}"

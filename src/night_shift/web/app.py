@@ -164,9 +164,10 @@ def create_app(
         repo: Repo,
         view: Annotated[str, Query(pattern="^(manual|auto|aplicadas|descartadas)$")] = "manual",
         min_score: Annotated[int, Query(alias="min", ge=0, le=100)] = 0,
+        stack: Annotated[str, Query(pattern="^(|python|ia|java)$")] = "",
     ):
         if view in LANE_VIEWS:
-            scores = repo.queue(LANE_VIEWS[view], min_score)
+            scores = repo.queue(LANE_VIEWS[view], min_score, stack=stack or None)
         else:
             scores = repo.decided(STATUS_VIEWS[view])
         return page(
@@ -176,6 +177,7 @@ def create_app(
             active="fila",
             view=view,
             min_score=min_score,
+            stack=stack,
             scores=scores,
         )
 

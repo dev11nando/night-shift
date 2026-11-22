@@ -20,6 +20,7 @@ class JobPosting:
     work_model: WorkModel | None = None
     contract: Contract | None = None
     level: Level | None = None
+    stack: str | None = None
     salary_min: int | None = None
     salary_max: int | None = None
     published_at: datetime | None = None

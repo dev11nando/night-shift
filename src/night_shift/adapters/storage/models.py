@@ -85,6 +85,7 @@ class Job(Base):
     work_model: Mapped[WorkModel | None] = mapped_column(str_enum(WorkModel))
     contract: Mapped[Contract | None] = mapped_column(str_enum(Contract))
     level: Mapped[Level | None] = mapped_column(str_enum(Level))
+    stack: Mapped[str | None] = mapped_column(String(20), index=True)  # python | ia | java
     salary_min: Mapped[int | None]
     salary_max: Mapped[int | None]
     url: Mapped[str] = mapped_column(String(1000))

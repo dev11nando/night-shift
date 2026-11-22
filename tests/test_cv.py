@@ -199,3 +199,40 @@ def test_render_english_pdf(tmp_path):
 def test_full_cv_keeps_every_skill():
     many = CV.model_copy(update={"skills": [f"skill{i}" for i in range(20)]})
     assert len(default_cv(many).skills) == 20, "o CV completo não corta habilidades"
+
+
+# ------------------------------------------------------- perfis e 1 página
+
+from night_shift.adapters.render.cv_pdf import page_count, render_cv_pdf_info  # noqa: E402
+from night_shift.config import Project  # noqa: E402
+
+
+def test_project_section_and_translation_check():
+    proj = Project.model_validate(
+        {"name": "TCC", "context": "SPTech", "bullets": [{"id": "tcc", "text": "Java"}]}
+    )
+    pt = CV.model_copy(update={"projects": [proj]})
+    assert "Projeto: TCC (SPTech)" in pt.as_text()
+    assert translation_problems(pt, CV_EN)[0].startswith("projetos não batem")
+    assert translation_problems(pt, CV_EN.model_copy(update={"projects": [proj]})) == []
+
+
+def test_render_always_fits_one_page(tmp_path):
+    long_exp = CV.experiences[0].model_copy(
+        update={
+            "bullets": [
+                b.model_copy(update={"id": f"b{i}", "text": "Texto longo de realização. " * 14})
+                for i, b in enumerate(CV.experiences[0].bullets * 12)
+            ]
+        }
+    )
+    huge = CV.model_copy(update={"experiences": [long_exp, CV.experiences[1]]})
+    info = render_cv_pdf_info(default_cv(huge), "Fulano", "f@x.com", tmp_path / "x.pdf")
+    assert page_count(info.path) == 1
+    assert info.scale < 1 and info.dropped_courses and info.trimmed_bullets > 0
+
+
+def test_short_cv_keeps_full_size(tmp_path):
+    info = render_cv_pdf_info(default_cv(CV), "Fulano", "f@x.com", tmp_path / "x.pdf")
+    assert (info.scale, info.dropped_courses, info.trimmed_bullets) == (1.0, False, 0)
+    assert page_count(info.path) == 1
