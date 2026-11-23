@@ -162,19 +162,39 @@ def test_documents_are_generated_and_saved(pipeline, tmp_path):
     run, rendered = run_docs(pipeline, tmp_path, DocsLLM())
 
     assert run.stats["documents"] == 1
-    assert [b.id for b in rendered[0].experiences[0].bullets] == ["llm", "apis"]
+    assert len(rendered) == 1, "o CV do tipo é gerado uma vez, sem ajuste por vaga"
     app = application(pipeline)
     path = Path(app.cv_variant_path)
-    assert path.parent.name.endswith("-fintech-x"), "uma pasta por vaga"
+    assert path.parent == tmp_path / "cv", "sem pasta por vaga"
     assert re.fullmatch(r"cv_marcos_fernando_11\d{3}\.pdf", path.name), path.name
     assert app.cover_letter.endswith("Marcos Fernando")
     assert app.answers["letter_subject"] == "Candidatura: Backend Python"
 
 
-def test_rejected_selection_is_retried_with_feedback(pipeline, tmp_path):
-    run, rendered = run_docs(pipeline, tmp_path, DocsLLM(bad_selection_first=True))
-    assert run.errors == []
-    assert [b.id for b in rendered[0].experiences[0].bullets] == ["llm", "apis"]
+def test_same_type_reuses_the_same_cv(pipeline, tmp_path):
+    other = posting(external_id="b2", title="Backend Python Pleno")
+    rendered = []
+
+    def render(cv, out, lang):
+        rendered.append(out.name)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"%PDF")
+        return out
+
+    llm = DocsLLM()
+    pipeline.run(
+        [
+            lambda: pipeline.collect([FakeSource("a", [JOB, other])], []),
+            lambda: pipeline.screen(HardFilter(PROFILE.preferences)),
+            lambda: pipeline.embed_rank(BagOfWordsEmbedder(), "python fastapi"),
+            lambda: pipeline.llm_score(llm, PROFILE, "cv", top_n=5),
+            lambda: pipeline.documents(llm, PROFILE, CV, render, tmp_path / "cv", 70, 5),
+        ]
+    )
+    with pipeline.sessions() as s:
+        paths = {a.cv_variant_path for a in s.scalars(select(Application))}
+    assert len(rendered) == 1 and len(paths) == 1, "duas vagas python/pt, um CV só"
+    assert "CVSelection" not in llm.calls, "o LLM não ajusta mais o CV"
 
 
 def test_bad_letter_twice_keeps_cv_without_letter(pipeline, tmp_path):

@@ -53,7 +53,7 @@
   </div>
   <div class="actions">
     <a class="btn" href="{{ j.url }}" target="_blank" rel="noopener">Abrir vaga</a>
-    {% if app and app.cv_variant_path %}<a class="btn" href="/jobs/{{ j.id }}/cv" target="_blank" rel="noopener">CV ajustado</a>{% endif %}
+    {% if app and app.cv_variant_path %}<a class="btn" href="/jobs/{{ j.id }}/cv" target="_blank" rel="noopener">CV {{ app.cv_variant_path.replace('\\', '/').split('/')[-1] }}</a>{% endif %}
     {% if app and app.status in ('applied_manual', 'auto_applied', 'discarded') %}
       <button class="btn" hx-post="/jobs/{{ j.id }}/undo" hx-target="#job-{{ j.id }}" hx-swap="outerHTML">Voltar para fila</button>
     {% else %}

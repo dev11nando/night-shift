@@ -4,7 +4,7 @@ import random
 import re
 
 from night_shift.config import Profile
-from night_shift.domain.naming import clear_cv_variants, cv_filename, person_slug
+from night_shift.domain.naming import cv_filename, person_slug, stable_cv_name
 
 
 def test_codes_per_stack_and_language():
@@ -39,8 +39,17 @@ def test_person_slug_and_short_name():
     assert signed.short_name == "Marcos Paixao"
 
 
-def test_clear_only_same_stack_and_language(tmp_path):
-    for name in ("cv_marcos_paixao_11123.pdf", "cv_marcos_paixao_12123.pdf", "outro.pdf"):
+def test_stable_name_keeps_existing_and_drops_extra_copies(tmp_path):
+    for name in (
+        "cv_marcos_paixao_11123.pdf",
+        "cv_marcos_paixao_11999.pdf",
+        "cv_marcos_paixao_12123.pdf",
+    ):
         (tmp_path / name).write_bytes(b"%PDF")
-    clear_cv_variants(tmp_path, "Marcos Paixao", "python", "pt")
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["cv_marcos_paixao_12123.pdf", "outro.pdf"]
+    assert stable_cv_name(tmp_path, "Marcos Paixao", "python", "pt") == "cv_marcos_paixao_11123.pdf"
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "cv_marcos_paixao_11123.pdf",
+        "cv_marcos_paixao_12123.pdf",
+    ]
+    new = stable_cv_name(tmp_path, "Marcos Paixao", "java", "en")
+    assert re.fullmatch(r"cv_marcos_paixao_32\d{3}\.pdf", new)

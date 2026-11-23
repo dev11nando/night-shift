@@ -318,8 +318,10 @@ deixados em branco, 11 obrigatórios para o candidato, reCAPTCHA presente.
   check` confere). Vaga em inglês → seleção, PDF (títulos e datas em inglês, arquivo `-en.pdf`)
   e carta em inglês.
 - **CV completo em PDF** para aplicações manuais: `night-shift cv pdf` gera
-  `output/cv/perfis/cv_<nome>_<perfil><idioma><3 dígitos>.pdf` (perfil 1 python, 2 ia, 3 java;
-  idioma 1 pt, 2 en; desde 23/11/2026), com todas as habilidades.
+  `output/cv/cv_<nome>_<perfil><idioma><3 dígitos>.pdf` (perfil 1 python, 2 ia, 3 java;
+  idioma 1 pt, 2 en; desde 23/11/2026), com todas as habilidades. Desde 23/11/2026 não há
+  CV ajustado por vaga: cada vaga usa o CV fixo do seu tipo (no máximo 6 arquivos); o LLM só
+  escreve a carta.
 
 ---
 

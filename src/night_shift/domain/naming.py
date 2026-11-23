@@ -2,7 +2,7 @@
 
 O código só faz sentido para você: perfil 1 = python, 2 = ia, 3 = java; idioma 1 = português,
 2 = inglês; os 3 dígitos são aleatórios. Ex.: ``cv_fulano_silva_11456.pdf`` é o CV Python
-em português. O recrutador vê só o nome; quem é qual fica no banco e no painel.
+em português. Há um arquivo fixo por tipo de vaga (no máximo 6), usado por toda vaga daquele tipo.
 """
 
 import random
@@ -29,9 +29,17 @@ def cv_filename(name: str, stack: str | None, lang: str, rng: random.Random | No
     return f"cv_{person_slug(name)}_{cv_code(stack, lang, rng)}.pdf"
 
 
-def clear_cv_variants(folder: Path, name: str, stack: str | None, lang: str) -> None:
-    """Apaga as versões anteriores do mesmo perfil e idioma (o sufixo aleatório muda a cada
-    geração; sem isso, a pasta acumularia cópias)."""
-    prefix = f"cv_{person_slug(name)}_{STACK_CODE.get(stack or 'python', 1)}{LANG_CODE[lang]}"
-    for old in folder.glob(f"{prefix}[0-9][0-9][0-9].pdf"):
-        old.unlink()
+def _prefix(name: str, stack: str | None, lang: str) -> str:
+    return f"cv_{person_slug(name)}_{STACK_CODE.get(stack or 'python', 1)}{LANG_CODE.get(lang, 1)}"
+
+
+def stable_cv_name(
+    folder: Path, name: str, stack: str | None, lang: str, rng: random.Random | None = None
+) -> str:
+    """Nome do CV fixo daquele tipo (perfil e idioma) na pasta: se já existe um, mantém o
+    mesmo nome (os 3 dígitos são sorteados uma vez só); senão sorteia um novo. Cópias extras
+    do mesmo tipo, se houver, são apagadas."""
+    found = sorted(folder.glob(f"{_prefix(name, stack, lang)}[0-9][0-9][0-9].pdf"))
+    for extra in found[1:]:
+        extra.unlink()
+    return found[0].name if found else cv_filename(name, stack, lang, rng)
