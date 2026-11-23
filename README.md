@@ -103,6 +103,7 @@ uv run night-shift schedule enable     # religa
 
 ```powershell
 uv run night-shift outreach -n 10     # acha contatos públicos e escreve as mensagens
+uv run night-shift outreach --recheck -n 0   # só varre de novo os sites atrás de e-mail
 ```
 
 A aba **Outreach** do painel mostra, por empresa, o e-mail

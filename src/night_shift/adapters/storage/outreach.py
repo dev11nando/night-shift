@@ -33,11 +33,28 @@ class OutreachRepository:
             .limit(limit)
         ).all()
 
+    def reset_discovery(self) -> int:
+        """Marca todas as empresas para serem varridas de novo na próxima etapa de contatos."""
+        companies = self.s.scalars(select(Company).where(Company.website.is_not(None))).all()
+        for c in companies:
+            c.contact_checked_at = None
+        return len(companies)
+
     def save_discovery(self, company: Company, contact, source_url, careers_url, about) -> None:
         # Contato do YAML (manual) nunca é trocado pelo descoberto.
         manual = company.contact_source_url == "config/companies.yaml"
         if contact and not manual:
             company.outreach_contact, company.contact_source_url = contact, source_url
+        if company.outreach_contact:
+            # Rascunhos já escritos sem destinatário ganham o e-mail achado agora.
+            for draft in self.s.scalars(
+                select(Outreach).where(
+                    Outreach.company_id == company.id,
+                    Outreach.status == OutreachStatus.DRAFT,
+                    Outreach.to_address.is_(None),
+                )
+            ):
+                draft.to_address = company.outreach_contact
         company.careers_url = careers_url or company.careers_url
         company.about = about or company.about
         company.contact_checked_at = utcnow()

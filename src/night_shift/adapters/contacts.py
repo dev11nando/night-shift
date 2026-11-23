@@ -1,4 +1,5 @@
-"""Procura, no próprio site de cada empresa, o e-mail público de recrutamento e uma frase
+"""Procura, no próprio site de cada empresa, o e-mail público (recrutamento ou, sem ele,
+o contato geral da empresa) e uma frase
 sobre o que a empresa faz (para personalizar o e-mail).
 
 Educado com os sites: respeita o robots.txt, espaça as requisições e abre poucas páginas
@@ -13,7 +14,7 @@ from urllib.robotparser import RobotFileParser
 
 from night_shift.adapters.sources.html_text import html_to_text
 from night_shift.adapters.sources.http import USER_AGENT, PoliteClient
-from night_shift.domain.contacts import EMAIL, pick_contact, site_domain
+from night_shift.domain.contacts import EMAIL, best_contact, site_domain
 from night_shift.ports import SourceError
 
 COMMON_PATHS = [
@@ -115,9 +116,13 @@ class ContactFinder:
         result.careers_url = next(
             (u for u, _ in pages[1:] if CAREERS_HINT.search(u.split("//", 1)[-1])), None
         )
-        for url, html in pages:
-            contact = pick_contact(_emails(html), base)
-            if contact:
-                result.contact, result.source_url = contact, url
-                break
+        # Melhor caixa entre todas as páginas: recrutamento numa página de carreiras ganha do
+        # contato geral que aparece no rodapé da home.
+        found = [
+            (best[0], n, best[1], url)
+            for n, (url, html) in enumerate(pages)
+            if (best := best_contact(_emails(html), base))
+        ]
+        if found:
+            _, _, result.contact, result.source_url = min(found)
         return result

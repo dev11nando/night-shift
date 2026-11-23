@@ -69,7 +69,33 @@ def test_pick_contact_prefers_best_recruiting_box_of_own_domain():
         "maria.souza@acme.com",
     ]
     assert pick_contact(emails, "https://acme.com") == "talentos@acme.com"
-    assert pick_contact(["contato@acme.com", "imprensa@acme.com"], "https://acme.com") is None
+
+
+def test_general_contact_is_used_when_there_is_no_recruiting_box():
+    site_ = "https://acme.com"
+    assert pick_contact(["imprensa@acme.com", "contato@acme.com"], site_) == "contato@acme.com"
+    assert pick_contact(["info@acme.com", "hello@acme.com"], site_) == "hello@acme.com"
+    assert pick_contact(["faleconosco@acme.com.br"], "https://www.acme.com.br") == (
+        "faleconosco@acme.com.br"
+    )
+    assert pick_contact(["contato@acme.com", "vagas@acme.com"], site_) == "vagas@acme.com"
+
+
+@pytest.mark.parametrize(
+    "email",
+    [
+        "imprensa@acme.com",
+        "suporte@acme.com",
+        "vendas@acme.com",
+        "privacidade@acme.com",
+        "dpo@acme.com",
+        "ouvidoria@acme.com",
+        "maria.souza@acme.com",
+        "contato@outra.com",
+    ],
+)
+def test_never_used(email):
+    assert pick_contact([email], "https://acme.com") is None
 
 
 def site(routes: dict[str, httpx.Response]) -> ContactFinder:
@@ -106,6 +132,17 @@ def test_discover_follows_careers_link_and_reads_about():
     assert d.careers_url == "https://acme.com/carreiras"
     assert d.about == "Infraestrutura de crédito para PMEs."
     assert not any("quero@" in p for p in d.pages), "e-mail em href não vira página"
+
+
+def test_discover_falls_back_to_general_contact():
+    finder = site(
+        {
+            "https://acme.com/robots.txt": httpx.Response(200, text="User-agent: *\nAllow: /"),
+            "https://acme.com": httpx.Response(200, text=HOME),
+        }
+    )
+    d = finder.discover("https://acme.com")
+    assert d.contact == "contato@acme.com" and d.source_url == "https://acme.com"
 
 
 def test_discover_respects_robots():
@@ -313,6 +350,22 @@ def test_discover_step_saves_results(pipeline, sessions):
         fintech = s.scalars(select(Company).where(Company.name == "Fintech")).one()
         assert fintech.outreach_contact == "talentos@b.com" and fintech.about == "Sobre"
         assert OutreachRepository(s).needing_discovery() == [], "varridas há menos de 30 dias"
+    with sessions.begin() as s:
+        assert OutreachRepository(s).reset_discovery() == 2
+    with sessions() as s:
+        assert len(OutreachRepository(s).needing_discovery()) == 2, "--recheck varre de novo"
+
+
+def test_found_contact_fills_drafts_without_address(sessions):
+    ids = add_companies(sessions)
+    with sessions.begin() as s:
+        company = s.get(Company, ids["Fintech"])
+        repo = OutreachRepository(s)
+        draft = repo.save_message(company, GOOD)
+        assert draft.to_address is None
+        repo.save_discovery(company, "contato@b.com", "https://b.com", None, None)
+    with sessions() as s:
+        assert s.get(Outreach, draft.id).to_address == "contato@b.com"
 
 
 # ---------------------------------------------------------------- painel
