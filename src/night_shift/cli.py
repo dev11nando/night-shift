@@ -18,6 +18,7 @@ from night_shift.adapters.sources.ats import ATS_SOURCES
 from night_shift.adapters.sources.http import PoliteClient, make_client
 from night_shift.adapters.storage import db
 from night_shift.adapters.storage.documents import DocumentsRepository
+from night_shift.adapters.storage.outreach import OutreachRepository
 from night_shift.adapters.storage.repository import JobRepository
 from night_shift.application.keywords import KeywordEmbedder
 from night_shift.application.pipeline import Pipeline
@@ -377,7 +378,13 @@ def docs(
     _run_steps("docs", lambda p, prof, pipe: _docs_steps(p, prof, pipe, limit))
 
 
-def _outreach_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline, limit: int | None):
+def _outreach_steps(
+    paths: ProjectPaths,
+    profile: Profile,
+    pipeline: Pipeline,
+    limit: int | None,
+    recheck: bool = False,
+):
     from night_shift.adapters.contacts import ContactFinder
 
     cv = _load_or_exit(load_cv, paths.cv_file)
@@ -393,6 +400,9 @@ def _outreach_steps(paths: ProjectPaths, profile: Profile, pipeline: Pipeline, l
     def sync():
         with pipeline.sessions.begin() as s:
             JobRepository(s).sync_companies(companies)
+            if recheck:
+                n = OutreachRepository(s).reset_discovery()
+                pipeline.log(f"varrendo de novo o site de {n} empresa(s)")
 
     return [
         sync,
@@ -412,10 +422,14 @@ def outreach(
     limit: int | None = typer.Option(
         None, "--limit", "-n", help="Máximo de mensagens hoje (padrão: llm.claude_daily_outreach)."
     ),
+    recheck: bool = typer.Option(
+        False, "--recheck", help="Varre de novo o site de todas as empresas, mesmo as recentes."
+    ),
 ) -> None:
-    """Varre os sites das empresas (contato de RH, carreiras) e escreve mensagens de outreach
-    (e-mail). Nada é enviado: tudo fica na aba Outreach do painel."""
-    _run_steps("outreach", lambda p, prof, pipe: _outreach_steps(p, prof, pipe, limit))
+    """Varre os sites das empresas (e-mail de recrutamento ou de contato geral, carreiras) e
+    escreve e-mails de outreach. Nada é enviado: tudo fica na aba Outreach do painel.
+    Com `-n 0`, só varre os sites, sem escrever e-mails."""
+    _run_steps("outreach", lambda p, prof, pipe: _outreach_steps(p, prof, pipe, limit, recheck))
 
 
 @app.command()

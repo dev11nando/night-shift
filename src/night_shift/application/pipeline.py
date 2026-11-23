@@ -349,7 +349,7 @@ class Pipeline:
                 self.log(f"  {name}: {found.contact}")
         if todo:
             found_n = self.stats.get("contacts_found", 0)
-            self.log(f"  {len(todo)} site(s) varrido(s), {found_n} e-mail(s) de RH")
+            self.log(f"  {len(todo)} site(s) varrido(s), {found_n} e-mail(s) de contato")
 
     def outreach(
         self,

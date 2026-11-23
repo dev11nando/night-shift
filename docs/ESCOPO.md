@@ -333,8 +333,15 @@ recrutamento ou quando o usuário adiciona um contato. Motivo, medido nos 88 sit
 imprensa, suporte, vendas), 64 têm página de carreiras e 85 têm descrição. E-mail de pessoa
 (nome.sobrenome@) nunca é usado nem adivinhado (LGPD); caixa geral também não.
 
+**Atualização (23/11/2026):** o contato geral da empresa passou a valer quando não há caixa de
+recrutamento: `contato@`, `faleconosco@`, `hello@`/`ola@`, `info@`, sempre do próprio domínio.
+Recrutamento continua com prioridade (mesmo em outra página do site). Seguem fora: e-mail de
+pessoa e caixas de outro assunto (imprensa, suporte, vendas, privacidade/DPO, ouvidoria).
+`night-shift outreach --recheck -n 0` varre de novo todos os sites sem escrever e-mails; um
+rascunho sem destinatário ganha o e-mail assim que ele é encontrado.
+
 - `night-shift outreach` (e a etapa no `run`): varre o site de cada empresa (robots.txt
-  respeitado, a cada 30 dias) atrás do e-mail público de RH, da página de carreiras e da
+  respeitado, a cada 30 dias) atrás do e-mail público (recrutamento ou contato geral), da página de carreiras e da
   descrição; escreve até `llm.claude_daily_outreach` (10) **e-mails** por dia, validados (sem
   campo para preencher, com assinatura, sem tecnologia fora do CV e da descrição). A nota de
   conexão do LinkedIn foi removida em 23/11/2026: a abordagem a recrutadores no LinkedIn é
