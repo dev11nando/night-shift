@@ -318,7 +318,8 @@ deixados em branco, 11 obrigatórios para o candidato, reCAPTCHA presente.
   check` confere). Vaga em inglês → seleção, PDF (títulos e datas em inglês, arquivo `-en.pdf`)
   e carta em inglês.
 - **CV completo em PDF** para aplicações manuais: `night-shift cv pdf` gera
-  `output/cv/curriculo.pdf` e `output/cv/resume-en.pdf`, com todas as habilidades.
+  `output/cv/perfis/cv_<nome>_<perfil><idioma><3 dígitos>.pdf` (perfil 1 python, 2 ia, 3 java;
+  idioma 1 pt, 2 en; desde 23/11/2026), com todas as habilidades.
 
 ---
 

@@ -1,6 +1,8 @@
 """Etapa de documentos: prompts, validação da carta e pipeline com LLM falso."""
 
 import json
+import re
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -162,7 +164,9 @@ def test_documents_are_generated_and_saved(pipeline, tmp_path):
     assert run.stats["documents"] == 1
     assert [b.id for b in rendered[0].experiences[0].bullets] == ["llm", "apis"]
     app = application(pipeline)
-    assert app.cv_variant_path.endswith("-fintech-x.pdf")
+    path = Path(app.cv_variant_path)
+    assert path.parent.name.endswith("-fintech-x"), "uma pasta por vaga"
+    assert re.fullmatch(r"cv_marcos_fernando_11\d{3}\.pdf", path.name), path.name
     assert app.cover_letter.endswith("Marcos Fernando")
     assert app.answers["letter_subject"] == "Candidatura: Backend Python"
 
@@ -227,5 +231,7 @@ def test_english_job_gets_english_cv(pipeline, tmp_path):
         ]
     )
     by_lang = {lang: (name, text) for lang, name, text in calls}
-    assert by_lang["en"][0].endswith("-en.pdf") and by_lang["en"][1].startswith("EN ")
-    assert not by_lang["pt"][0].endswith("-en.pdf") and not by_lang["pt"][1].startswith("EN ")
+    assert re.fullmatch(r"cv_marcos_fernando_12\d{3}\.pdf", by_lang["en"][0])
+    assert by_lang["en"][1].startswith("EN ")
+    assert re.fullmatch(r"cv_marcos_fernando_11\d{3}\.pdf", by_lang["pt"][0])
+    assert not by_lang["pt"][1].startswith("EN ")

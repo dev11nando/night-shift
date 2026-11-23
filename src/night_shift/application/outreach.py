@@ -48,7 +48,7 @@ GENERIC_OPENING = re.compile(r"^\s*(ol[aá]|oi|prezad[oa]s?|car[oa]s?|bom dia|bo
 
 
 def signature(profile: Profile) -> str:
-    return (profile.outreach.signature or profile.name).strip()
+    return profile.short_name
 
 
 def _email_instructions(profile: Profile, company: str) -> str:

@@ -154,6 +154,15 @@ class Profile(BaseModel):
     email: str
     outreach: OutreachConfig = OutreachConfig()
     preferences: Preferences = Preferences()
+
+    @property
+    def short_name(self) -> str:
+        """Como você assina (``outreach.signature``); sem ela, primeiro e último nome."""
+        if self.outreach.signature:
+            return self.outreach.signature.strip()
+        parts = self.name.split()
+        return " ".join([parts[0], parts[-1]]) if len(parts) > 1 else self.name
+
     automation: AutomationConfig = AutomationConfig()
     llm: LLMConfig = LLMConfig()
     application: ApplicationConfig = ApplicationConfig()

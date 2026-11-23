@@ -50,7 +50,7 @@ uv run night-shift run --time-budget 120   # nota por no máximo 120 min; o rest
 uv run night-shift collect             # só coleta e filtro (não precisa de LLM)
 uv run night-shift rank --top 10       # só similaridade + nota
 uv run night-shift rank --rescore      # reavalia vagas sem decisão (ex.: depois de mudar o prompt)
-uv run night-shift docs -n 5          # CV ajustado (output/cv/*.pdf) + carta para as melhores
+uv run night-shift docs -n 5          # CV ajustado (output/cv/<vaga>/) + carta para as melhores
 uv run night-shift docs --regenerate   # gera de novo para as vagas da fila (ex.: mudou o CV)
 uv run night-shift serve --open        # painel em http://127.0.0.1:8765 (Hoje, Ao vivo, Fila, Mercado)
 uv run night-shift jobs -n 20          # melhores vagas avaliadas, no terminal
@@ -62,7 +62,15 @@ uv run night-shift companies probe nubank stone   # descobre o ATS de uma empres
 
 ```powershell
 uv run night-shift cv check            # confere cada perfil e a versão em inglês
-uv run night-shift cv pdf              # output/cv/curriculo-<perfil>.pdf e resume-<perfil>-en.pdf
+uv run night-shift cv pdf              # output/cv/perfis/cv_<nome>_<código>.pdf
+```
+
+Nome dos PDFs de CV: `cv_<nome>_<perfil><idioma><3 dígitos>.pdf`, com perfil 1 = python,
+2 = ia, 3 = java e idioma 1 = português, 2 = inglês (ex.: `cv_fulano_silva_11456.pdf` é o
+Python em português). Os 3 dígitos são aleatórios; o recrutador só vê o nome. O CV ajustado de
+cada vaga fica na pasta da vaga, `output/cv/<id>-<empresa>/`.
+
+```powershell
 uv run night-shift rank --rescreen     # reclassifica a stack das vagas e refaz o filtro
 ```
 

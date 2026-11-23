@@ -17,11 +17,19 @@ O e-mail de outreach (empresa sem vaga aberta) agora segue as **regras do candid
   - recusa e-mail que cite um ex-empregador (se a empresa-alvo já foi empregadora, o nome dela pode aparecer);
   - termos técnicos do modelo contam como conhecidos, e o limite de palavras acompanha o tamanho do modelo.
 
+### Nome dos PDFs de CV
+
+- Novo formato: `cv_<nome>_<perfil><idioma><3 dígitos>.pdf`, com perfil 1 = python, 2 = ia, 3 = java e idioma 1 = português, 2 = inglês; os 3 dígitos são aleatórios (`domain/naming.py`). O recrutador vê só o nome; o código só faz sentido para o candidato.
+- O nome vem de `Profile.short_name`: `outreach.signature` ou, sem ela, primeiro e último nome. A assinatura do e-mail usa a mesma regra.
+- CV ajustado de cada vaga: uma pasta por vaga, `output/cv/<id>-<empresa>/`. Ao regerar, a versão anterior do mesmo perfil e idioma é apagada.
+- CVs base (`night-shift cv pdf`): `output/cv/perfis/`.
+
 ## Como foi testado
 
 - [x] `uv run ruff check .` e `uv run ruff format --check .`
-- [x] `uv run pytest`: 273 passaram (testes novos: saudação genérica, abertura e fechamento obrigatórios, ex-empregador no e-mail, regras e modelo no prompt, termos e limite pelo modelo, ex-empregador como alvo)
+- [x] `uv run pytest`: 277 passaram (testes novos: saudação genérica, abertura e fechamento obrigatórios, ex-empregador no e-mail, regras e modelo no prompt, termos e limite pelo modelo, ex-empregador como alvo)
 - [x] Rodado de verdade: e-mails gerados com o Haiku para Creditas, NeuralMind e Getnet a partir do modelo real. Todos abrem com "Sou Marcos Paixao", fecham com "Atenciosamente," e a assinatura, não citam ex-empregadores e adaptam o meio a cada empresa (crédito na Creditas, LLMs e agentes de IA na NeuralMind, transações na Getnet). Uma tentativa da Creditas passou do limite de palavras e a segunda passou. Os rascunhos que estavam na fila foram regerados com o prompt novo.
+- [x] Nomes dos PDFs: `tests/test_naming.py` (códigos, 3 dígitos com zero à esquerda, nome curto, limpeza só do mesmo perfil e idioma) e os testes de documentos com o novo caminho. Rodado de verdade: `night-shift cv pdf` gerou os 6 CVs base em `output/cv/perfis/`, todos com 1 página. Os PDFs por vaga que já existiam foram movidos para as pastas novas, com o banco atualizado.
 - [x] `night-shift db upgrade` no banco real: coluna `linkedin_note` removida, os 23 rascunhos intactos; a página Outreach abre (200) sem a nota.
 
 ## O que não foi coberto / riscos

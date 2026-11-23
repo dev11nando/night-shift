@@ -46,6 +46,7 @@ from night_shift.domain.enrich import enrich
 from night_shift.domain.enums import RunStatus
 from night_shift.domain.filters import HardFilter
 from night_shift.domain.job import JobPosting
+from night_shift.domain.naming import clear_cv_variants, cv_filename
 from night_shift.domain.stacks import DEFAULT_STACK
 from night_shift.domain.text import fold
 from night_shift.ports import Embedder, JobSource, LLMProvider, LLMUnavailable, SourceError
@@ -276,8 +277,11 @@ class Pipeline:
             en = pick(per_stack(cv_en), job.stack) if cv_en else None
             base, doc_lang = (en, "en") if lang == "en" and en else (cv_pt, "pt")
             tailored = self._tailor(llm, base, job, doc_lang)
-            name = f"{job_id}-{slugify(job.company_name)}{'-en' if doc_lang == 'en' else ''}.pdf"
-            pdf = render(tailored, out_dir / name, doc_lang)
+            folder = out_dir / f"{job_id}-{slugify(job.company_name)}"
+            folder.mkdir(parents=True, exist_ok=True)
+            clear_cv_variants(folder, profile.short_name, job.stack, doc_lang)
+            name = cv_filename(profile.short_name, job.stack, doc_lang)
+            pdf = render(tailored, folder / name, doc_lang)
             letter = self._letter(llm, profile, base, job)
 
             with self.sessions.begin() as s:

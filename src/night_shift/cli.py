@@ -36,6 +36,7 @@ from night_shift.config import (
 from night_shift.domain.cv import default_cv, translation_problems
 from night_shift.domain.enums import RunStatus
 from night_shift.domain.filters import HardFilter
+from night_shift.domain.naming import clear_cv_variants, cv_filename
 from night_shift.paths import STACK_FILES, ProjectPaths
 from night_shift.ports import SourceError
 from night_shift.runtime.job_object import IS_WINDOWS, is_store_python
@@ -828,20 +829,23 @@ def cv_check() -> None:
 @cv_app.command("pdf")
 def cv_pdf() -> None:
     """Gera o CV completo de cada perfil (python, ia, java), em PT e EN, sempre em uma
-    página, em output/cv/: curriculo-<perfil>.pdf e resume-<perfil>-en.pdf."""
+    página, em output/cv/perfis/: cv_<nome>_<perfil><idioma><3 dígitos>.pdf (perfil 1 python,
+    2 ia, 3 java; idioma 1 português, 2 inglês)."""
     paths = _paths()
     profile = _load_or_exit(load_profile, paths.profile_file)
+    folder = paths.cv_output_dir / "perfis"
+    folder.mkdir(parents=True, exist_ok=True)
     for stack, pt_file, en_file in _cv_profiles(paths):
-        for lang, source, name in (
-            ("pt", pt_file, f"curriculo-{stack}.pdf"),
-            ("en", en_file, f"resume-{stack}-en.pdf"),
-        ):
+        for lang, source in (("pt", pt_file), ("en", en_file)):
             if not source.exists():
                 continue
             cv = _load_or_exit(load_cv, source)
+            clear_cv_variants(folder, profile.short_name, stack, lang)
+            name = cv_filename(profile.short_name, stack, lang)
             info = render_cv_pdf_info(
-                default_cv(cv), profile.name, profile.email, paths.cv_output_dir / name, lang
+                default_cv(cv), profile.name, profile.email, folder / name, lang
             )
+            name = f"{name}  ({stack}, {lang})"
             pages = page_count(info.path)
             notes = []
             if info.scale < 1:
