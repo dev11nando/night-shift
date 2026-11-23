@@ -96,9 +96,9 @@ uv run night-shift schedule enable     # religa
 uv run night-shift outreach -n 10     # acha contatos públicos e escreve as mensagens
 ```
 
-A aba **Outreach** do painel mostra, por empresa, a nota de conexão do LinkedIn e o e-mail
-prontos, o link para achar recrutadores no LinkedIn e a página de carreiras. Você envia
-(LinkedIn ou "Abrir no Gmail") e marca como enviada. Também roda na busca de cada noite.
+A aba **Outreach** do painel mostra, por empresa, o e-mail
+pronto, o link para achar recrutadores no LinkedIn e a página de carreiras. Você envia
+("Abrir no Gmail" ou copiando o texto) e marca como enviada. Também roda na busca de cada noite.
 
 ### Funil
 

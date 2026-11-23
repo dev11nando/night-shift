@@ -178,7 +178,6 @@ class Outreach(Base):
     gmail_draft_id: Mapped[str | None] = mapped_column(String(200))
     subject: Mapped[str] = mapped_column(String(300))
     body: Mapped[str] = mapped_column(Text)  # versão e-mail
-    linkedin_note: Mapped[str | None] = mapped_column(String(300))
     status: Mapped[OutreachStatus] = mapped_column(
         str_enum(OutreachStatus), default=OutreachStatus.DRAFT
     )

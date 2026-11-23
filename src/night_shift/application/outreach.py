@@ -1,5 +1,6 @@
-"""Mensagem de outreach para uma EMPRESA (não uma vaga): nota de conexão do LinkedIn e
-versão e-mail. Fluxo diferente da carta de candidatura (application/documents.py)."""
+"""E-mail de outreach para uma EMPRESA (não uma vaga).
+
+Fluxo diferente da carta de candidatura (application/documents.py)."""
 
 import re
 from urllib.parse import quote_plus
@@ -10,7 +11,6 @@ from night_shift.config import CVMaster, Profile
 from night_shift.domain.cv import invented_terms
 from night_shift.domain.text import contains_term, fold
 
-LINKEDIN_NOTE_LIMIT = 300  # limite do próprio LinkedIn para nota de convite
 MAX_EMAIL_WORDS = 160
 
 SYSTEM = (
@@ -30,7 +30,6 @@ SECTOR_LABEL = {
 
 
 class OutreachMessage(BaseModel):
-    linkedin_note: str = Field(description="Nota de conexão do LinkedIn, no máximo 300 caracteres.")
     subject: str = Field(description="Assunto do e-mail, curto.")
     email_body: str = Field(description="E-mail, parágrafos separados por linha em branco.")
 
@@ -93,14 +92,10 @@ O que ela diz de si (site): {context}
 ## Tarefa
 Não há vaga específica: o objetivo é abrir uma conversa sobre oportunidades de backend.
 
-- linkedin_note: nota de convite para alguém de recrutamento ou liderança técnica da
-  {company}. No MÁXIMO 300 caracteres contando espaços. Sem saudação com nome (não sabemos
-  quem vai receber). Diga quem é o candidato em poucas palavras, ligue UMA experiência real
-  dele ao que a {company} faz e peça para conversar.
 - subject: assunto curto do e-mail, sem clichê.
 {_email_instructions(profile, company)}
 
-Regras: na nota e no e-mail, NÃO cite o nome das empresas onde o candidato trabalhou (fale
+Regras: NÃO cite o nome das empresas onde o candidato trabalhou (fale
 da experiência: "na minha última experiência", "atuei com..."); experiência com data de fim já
 acabou (fale no passado); não aponte lacunas; não invente experiência, número, tecnologia ou
 fato sobre a empresa; nada de colchetes ou campos para preencher; português do Brasil."""
@@ -124,15 +119,13 @@ def validate_outreach(
     about: str | None,
     company: str | None = None,
 ) -> OutreachMessage:
-    note, body = msg.linkedin_note.strip(), msg.email_body.strip()
+    body = msg.email_body.strip()
     template = profile.outreach.email_template or ""
-    if len(note) > LINKEDIN_NOTE_LIMIT:
-        raise OutreachError(f"nota do LinkedIn com {len(note)} caracteres (máximo 300)")
     words = len(body.split())
     max_words = max(MAX_EMAIL_WORDS, len(template.split()) + 40)
     if words > max_words:
         raise OutreachError(f"e-mail longo demais ({words} palavras)")
-    for text in (note, body, msg.subject):
+    for text in (body, msg.subject):
         if re.search(r"\[[^\]]*\]|\{[^}]*\}|<[^>]*>", text):
             raise OutreachError("mensagem com campo para preencher")
     sig = signature(profile)
@@ -146,10 +139,10 @@ def validate_outreach(
         raise OutreachError(
             f"e-mail precisa terminar com 'Atenciosamente,' e a assinatura '{sig}.'"
         )
-    if cited := _employers_cited(f"{note}\n{body}", cv, company):
+    if cited := _employers_cited(body, cv, company):
         raise OutreachError(f"cita empresa onde o candidato trabalhou: {', '.join(cited)}")
     allowed = f"{about or ''}\n{template}"
-    invented = [t for t in invented_terms(f"{note}\n{body}", cv) if not contains_term(allowed, t)]
+    invented = [t for t in invented_terms(body, cv) if not contains_term(allowed, t)]
     if invented:
         raise OutreachError(f"cita o que não está no CV: {', '.join(invented)}")
-    return OutreachMessage(linkedin_note=note, subject=msg.subject.strip(), email_body=body)
+    return OutreachMessage(subject=msg.subject.strip(), email_body=body)

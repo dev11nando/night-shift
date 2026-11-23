@@ -411,7 +411,7 @@ def outreach(
     ),
 ) -> None:
     """Varre os sites das empresas (contato de RH, carreiras) e escreve mensagens de outreach
-    (nota do LinkedIn + e-mail). Nada é enviado: tudo fica na aba Outreach do painel."""
+    (e-mail). Nada é enviado: tudo fica na aba Outreach do painel."""
     _run_steps("outreach", lambda p, prof, pipe: _outreach_steps(p, prof, pipe, limit))
 
 

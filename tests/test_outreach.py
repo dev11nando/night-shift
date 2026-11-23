@@ -134,23 +134,18 @@ def body(middle: str) -> str:
 
 
 GOOD = OutreachMessage(
-    linkedin_note=(
-        "Oi! Sou backend Python e construí análise de crédito com LLMs. "
-        "Adoraria conversar sobre o time de vocês."
-    ),
     subject="Backend Python com experiência em crédito",
     email_body=body("Construí APIs em Python e análise de crédito com LLMs."),
 )
 
 
 def test_valid_message():
-    assert validate_outreach(GOOD, PROFILE, CV, None).linkedin_note.startswith("Oi!")
+    assert validate_outreach(GOOD, PROFILE, CV, None).email_body.startswith("Sou Marcos")
 
 
 @pytest.mark.parametrize(
     ("update", "message"),
     [
-        ({"linkedin_note": "x" * 301}, "301 caracteres"),
         ({"email_body": body("palavra " * 170)}, "longo demais"),
         ({"email_body": body("Atuei na [Empresa].")}, "campo para preencher"),
         ({"email_body": "Olá, equipe de recrutamento!\n\nSou Marcos." + END}, "saudação genérica"),
@@ -158,8 +153,8 @@ def test_valid_message():
         ({"email_body": "Meu nome é Marcos Fernando." + END}, "começar por 'Sou Marcos"),
         ({"email_body": "Sou Marcos Fernando, backend.\n\nAbraço,\nMarcos"}, "Atenciosamente"),
         ({"email_body": body("Trabalhei na IORQ com crédito.")}, "IORQ"),
-        ({"linkedin_note": "Na Quatá fiz APIs em Python."}, "Quatá"),
-        ({"linkedin_note": "Tenho anos de Kotlin."}, "kotlin"),
+        ({"email_body": body("Na Quatá fiz APIs em Python.")}, "Quatá"),
+        ({"email_body": body("Tenho anos de Kotlin.")}, "kotlin"),
     ],
 )
 def test_invalid_messages(update, message):
@@ -211,7 +206,7 @@ def test_target_company_that_was_an_employer_can_be_named():
 
 
 def test_company_stack_from_about_is_allowed():
-    msg = GOOD.model_copy(update={"linkedin_note": "Vi que vocês usam Kafka e crédito."})
+    msg = GOOD.model_copy(update={"email_body": body("Vi que vocês usam Kafka e crédito.")})
     assert validate_outreach(msg, PROFILE, CV, "Plataforma em Kafka para crédito")
 
 
@@ -277,7 +272,7 @@ class OutreachLLM:
         self.calls += 1
         if self.bad:
             self.bad -= 1
-            return GOOD.model_copy(update={"linkedin_note": "x" * 400})
+            return GOOD.model_copy(update={"email_body": "Olá, equipe!"})
         return GOOD
 
 
@@ -294,7 +289,7 @@ def test_outreach_step_respects_daily_limit_and_saves_messages(pipeline, session
     with sessions() as s:
         rows = s.scalars(select(Outreach).order_by(Outreach.id)).all()
         assert [r.company.name for r in rows] == ["Com RH", "Manual"]
-        assert rows[1].to_address == "eu@manual.com" and rows[0].linkedin_note == GOOD.linkedin_note
+        assert rows[1].to_address == "eu@manual.com" and rows[0].body == GOOD.email_body
     assert llm.calls == 3, "a 1ª mensagem ruim teve uma 2ª tentativa"
 
     run = pipeline.run([lambda: pipeline.outreach(OutreachLLM(), PROFILE, CV, daily_limit=2)])
@@ -334,7 +329,8 @@ def test_outreach_page_and_actions(sessions):
 
     html = client.get("/outreach").text
     assert "Para enviar (1)" in html and "Com RH" in html
-    assert GOOD.linkedin_note in html and "Abrir no Gmail" in html
+    assert "Sou Marcos Fernando" in html and "Abrir no Gmail" in html
+    assert "Nota do LinkedIn" not in html
     assert "https://a.com/carreiras" in html and "linkedin.com/search" in html
     assert 'Outreach <span class="pill">1</span>' in html
 

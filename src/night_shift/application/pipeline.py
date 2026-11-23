@@ -355,7 +355,7 @@ class Pipeline:
         daily_limit: int,
         budget_seconds: float | None = None,
     ) -> None:
-        """Escreve mensagens de outreach (nota do LinkedIn + e-mail) para até ``daily_limit``
+        """Escreve e-mails de outreach para até ``daily_limit``
         empresas por dia. Nada é enviado: tudo fica no painel esperando você."""
         self.start_budget(budget_seconds)
         self._progress("outreach")
