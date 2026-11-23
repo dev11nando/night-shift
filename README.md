@@ -1,8 +1,8 @@
 # night-shift
 
 Sistema local que trabalha enquanto você dorme: coleta vagas, avalia o encaixe com seu perfil
-usando um LLM (Claude Haiku pela sua assinatura, ou Ollama local), prepara CV ajustado e carta
-para as melhores, separa o que dá para aplicar sozinho do que precisa de você e rascunha e-mails
+usando um LLM (Claude Haiku pela sua assinatura, ou Ollama local), prepara o CV do tipo da vaga e
+a carta para as melhores, separa o que dá para aplicar sozinho do que precisa de você e rascunha e-mails
 de apresentação para empresas-alvo.
 
 > Status: **Fase 8 (perfis de CV por stack)**. Veja o [escopo do MVP](docs/ESCOPO.md).
@@ -50,7 +50,7 @@ uv run night-shift run --time-budget 120   # nota por no máximo 120 min; o rest
 uv run night-shift collect             # só coleta e filtro (não precisa de LLM)
 uv run night-shift rank --top 10       # só similaridade + nota
 uv run night-shift rank --rescore      # reavalia vagas sem decisão (ex.: depois de mudar o prompt)
-uv run night-shift docs -n 5          # CV ajustado (output/cv/*.pdf) + carta para as melhores
+uv run night-shift docs -n 5          # carta para as melhores + CV do tipo da vaga
 uv run night-shift docs --regenerate   # gera de novo para as vagas da fila (ex.: mudou o CV)
 uv run night-shift serve --open        # painel em http://127.0.0.1:8765 (Hoje, Ao vivo, Fila, Mercado)
 uv run night-shift jobs -n 20          # melhores vagas avaliadas, no terminal
@@ -62,7 +62,16 @@ uv run night-shift companies probe nubank stone   # descobre o ATS de uma empres
 
 ```powershell
 uv run night-shift cv check            # confere cada perfil e a versão em inglês
-uv run night-shift cv pdf              # output/cv/curriculo-<perfil>.pdf e resume-<perfil>-en.pdf
+uv run night-shift cv pdf              # os 6 CVs fixos em output/cv/
+```
+
+Nome dos PDFs de CV: `cv_<nome>_<perfil><idioma><3 dígitos>.pdf`, com perfil 1 = python,
+2 = ia, 3 = java e idioma 1 = português, 2 = inglês (ex.: `cv_fulano_silva_11456.pdf` é o
+Python em português). Os 3 dígitos são sorteados uma vez e o nome se mantém; o recrutador só
+vê o nome. **Não há CV por vaga:** cada vaga usa o CV fixo do seu tipo (perfil × idioma), então
+`output/cv/` tem no máximo 6 arquivos.
+
+```powershell
 uv run night-shift rank --rescreen     # reclassifica a stack das vagas e refaz o filtro
 ```
 
@@ -75,7 +84,7 @@ Três perfis de CV, cada um com versão em inglês e sempre em **uma página**:
 | Java (foco em POO) | `config/cv_java.yaml` | só júnior |
 
 Cada vaga é classificada numa stack pelo título (e, sem pista no título, pela descrição); a
-nota, o CV ajustado e a carta usam o perfil dela. Níveis por stack em
+nota, o CV e a carta usam o perfil dela. Níveis por stack em
 `preferences.stack_levels` do `profile.yaml`. Vaga em inglês recebe CV e carta em inglês.
 
 ### Acompanhar uma rodada
@@ -96,9 +105,9 @@ uv run night-shift schedule enable     # religa
 uv run night-shift outreach -n 10     # acha contatos públicos e escreve as mensagens
 ```
 
-A aba **Outreach** do painel mostra, por empresa, a nota de conexão do LinkedIn e o e-mail
-prontos, o link para achar recrutadores no LinkedIn e a página de carreiras. Você envia
-(LinkedIn ou "Abrir no Gmail") e marca como enviada. Também roda na busca de cada noite.
+A aba **Outreach** do painel mostra, por empresa, o e-mail
+pronto, o link para achar recrutadores no LinkedIn e a página de carreiras. Você envia
+("Abrir no Gmail" ou copiando o texto) e marca como enviada. Também roda na busca de cada noite.
 
 ### Funil
 
@@ -114,7 +123,7 @@ uv run night-shift apply --job 589     # uma vaga específica (Greenhouse/Lever/
 uv run night-shift apply --preview     # só preenche e tira print, sem enviar
 ```
 
-O sistema preenche dados, CV ajustado e carta; **você confere, completa e clica em enviar**.
+O sistema preenche dados, CV do tipo da vaga e carta; **você confere, completa e clica em enviar**.
 Ele nunca envia sozinho e nunca preenche CPF, raça, gênero, orientação ou deficiência.
 Configure `application.current_company` e `application.answers` no `profile.yaml` e o
 LinkedIn em `contact.linkedin` do `cv_master.yaml` para sobrar menos campo para você.

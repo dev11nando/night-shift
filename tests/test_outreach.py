@@ -17,10 +17,11 @@ from night_shift.application.outreach import (
     OutreachError,
     OutreachMessage,
     linkedin_people_search,
+    outreach_prompt,
     validate_outreach,
 )
 from night_shift.application.pipeline import Pipeline
-from night_shift.config import CompanyConfig, Profile
+from night_shift.config import CompanyConfig, OutreachConfig, Profile
 from night_shift.domain.contacts import pick_contact, recruiting_rank, same_company
 from night_shift.domain.enums import OutreachStatus
 from night_shift.runtime.stop_flag import StopFlag
@@ -125,30 +126,35 @@ def test_discover_site_down():
 
 # ---------------------------------------------------------------- mensagem
 
+END = "\n\nAtenciosamente,\nMarcos Fernando."
+
+
+def body(middle: str) -> str:
+    return f"Sou Marcos Fernando, backend Python.\n\n{middle}{END}"
+
+
 GOOD = OutreachMessage(
-    linkedin_note=(
-        "Oi! Sou backend Python e construí análise de crédito com LLMs. "
-        "Adoraria conversar sobre o time de vocês."
-    ),
     subject="Backend Python com experiência em crédito",
-    email_body=(
-        "Olá, time.\n\nConstruí APIs em Python e análise de crédito com LLMs.\n\nMarcos Fernando"
-    ),
+    email_body=body("Construí APIs em Python e análise de crédito com LLMs."),
 )
 
 
 def test_valid_message():
-    assert validate_outreach(GOOD, PROFILE, CV, None).linkedin_note.startswith("Oi!")
+    assert validate_outreach(GOOD, PROFILE, CV, None).email_body.startswith("Sou Marcos")
 
 
 @pytest.mark.parametrize(
     ("update", "message"),
     [
-        ({"linkedin_note": "x" * 301}, "301 caracteres"),
-        ({"email_body": "palavra " * 170 + "Marcos"}, "longo demais"),
-        ({"email_body": "Olá [Nome],\n\nMarcos"}, "campo para preencher"),
-        ({"email_body": "Olá, time.\n\nAbraço"}, "assinatura"),
-        ({"linkedin_note": "Tenho anos de Kotlin."}, "kotlin"),
+        ({"email_body": body("palavra " * 170)}, "longo demais"),
+        ({"email_body": body("Atuei na [Empresa].")}, "campo para preencher"),
+        ({"email_body": "Olá, equipe de recrutamento!\n\nSou Marcos." + END}, "saudação genérica"),
+        ({"email_body": "Prezados,\n\nSou Marcos." + END}, "saudação genérica"),
+        ({"email_body": "Meu nome é Marcos Fernando." + END}, "começar por 'Sou Marcos"),
+        ({"email_body": "Sou Marcos Fernando, backend.\n\nAbraço,\nMarcos"}, "Atenciosamente"),
+        ({"email_body": body("Trabalhei na IORQ com crédito.")}, "IORQ"),
+        ({"email_body": body("Na Quatá fiz APIs em Python.")}, "Quatá"),
+        ({"email_body": body("Tenho anos de Kotlin.")}, "kotlin"),
     ],
 )
 def test_invalid_messages(update, message):
@@ -156,8 +162,51 @@ def test_invalid_messages(update, message):
         validate_outreach(GOOD.model_copy(update=update), PROFILE, CV, None)
 
 
+TEMPLATE = (
+    "Sou Marcos Paixao, engenheiro de software backend com Python.\n\n"
+    "Na minha última experiência, trabalhei com FastAPI e Terraform.\n\n"
+    "Acredito que tenha conexão com a Empresa.\n\nAtenciosamente,\nMarcos Paixao."
+)
+TEMPLATED = Profile(
+    name="Marcos Fernando Araujo da Paixao",
+    email="m@x.com",
+    outreach={"email_template": TEMPLATE, "signature": "Marcos Paixao"},
+)
+
+
+def test_rules_and_template_go_into_prompt():
+    prompt = outreach_prompt(TEMPLATED, CV, "Acme", "fintech", None)
+    assert "Modelo do candidato (referência)" in prompt and "Não é\n    para copiar" in prompt
+    assert 'Sou Marcos Paixao, ..."' in prompt and '"Marcos Paixao."' in prompt
+    assert "direto e objetivo" in prompt and "NÃO cite o nome das empresas" in prompt
+    plain = outreach_prompt(PROFILE, CV, "Acme", "fintech", None)
+    assert "Modelo do candidato" not in plain and "Sou Marcos Fernando Araujo" not in plain
+    assert 'Sou Marcos Fernando, ..."' in plain
+
+
+def test_template_terms_and_length_are_allowed():
+    msg = GOOD.model_copy(update={"email_body": TEMPLATE.replace("Empresa", "Acme")})
+    assert validate_outreach(msg, TEMPLATED, CV, None, "Acme"), "Terraform vem do modelo"
+    long_template = TEMPLATED.model_copy(
+        update={
+            "outreach": OutreachConfig(
+                email_template=TEMPLATE + " palavra" * 170, signature="Marcos Paixao"
+            )
+        }
+    )
+    long_body = GOOD.model_copy(
+        update={"email_body": TEMPLATE.replace("Python.", "Python." + " palavra" * 180)}
+    )
+    assert validate_outreach(long_body, long_template, CV, None, "Acme"), "limite segue o modelo"
+
+
+def test_target_company_that_was_an_employer_can_be_named():
+    msg = GOOD.model_copy(update={"email_body": body("Quero voltar à IORQ.")})
+    assert validate_outreach(msg, PROFILE, CV, None, "IORQ")
+
+
 def test_company_stack_from_about_is_allowed():
-    msg = GOOD.model_copy(update={"linkedin_note": "Vi que vocês usam Kafka e crédito."})
+    msg = GOOD.model_copy(update={"email_body": body("Vi que vocês usam Kafka e crédito.")})
     assert validate_outreach(msg, PROFILE, CV, "Plataforma em Kafka para crédito")
 
 
@@ -223,7 +272,7 @@ class OutreachLLM:
         self.calls += 1
         if self.bad:
             self.bad -= 1
-            return GOOD.model_copy(update={"linkedin_note": "x" * 400})
+            return GOOD.model_copy(update={"email_body": "Olá, equipe!"})
         return GOOD
 
 
@@ -240,7 +289,7 @@ def test_outreach_step_respects_daily_limit_and_saves_messages(pipeline, session
     with sessions() as s:
         rows = s.scalars(select(Outreach).order_by(Outreach.id)).all()
         assert [r.company.name for r in rows] == ["Com RH", "Manual"]
-        assert rows[1].to_address == "eu@manual.com" and rows[0].linkedin_note == GOOD.linkedin_note
+        assert rows[1].to_address == "eu@manual.com" and rows[0].body == GOOD.email_body
     assert llm.calls == 3, "a 1ª mensagem ruim teve uma 2ª tentativa"
 
     run = pipeline.run([lambda: pipeline.outreach(OutreachLLM(), PROFILE, CV, daily_limit=2)])
@@ -280,7 +329,8 @@ def test_outreach_page_and_actions(sessions):
 
     html = client.get("/outreach").text
     assert "Para enviar (1)" in html and "Com RH" in html
-    assert GOOD.linkedin_note in html and "Abrir no Gmail" in html
+    assert "Sou Marcos Fernando" in html and "Abrir no Gmail" in html
+    assert "Nota do LinkedIn" not in html
     assert "https://a.com/carreiras" in html and "linkedin.com/search" in html
     assert 'Outreach <span class="pill">1</span>' in html
 

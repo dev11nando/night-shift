@@ -84,7 +84,6 @@ class OutreachRepository:
             to_address=company.outreach_contact,
             subject=msg.subject,
             body=msg.email_body,
-            linkedin_note=msg.linkedin_note,
         )
         self.s.add(row)
         self.s.flush()

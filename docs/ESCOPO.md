@@ -318,7 +318,10 @@ deixados em branco, 11 obrigatórios para o candidato, reCAPTCHA presente.
   check` confere). Vaga em inglês → seleção, PDF (títulos e datas em inglês, arquivo `-en.pdf`)
   e carta em inglês.
 - **CV completo em PDF** para aplicações manuais: `night-shift cv pdf` gera
-  `output/cv/curriculo.pdf` e `output/cv/resume-en.pdf`, com todas as habilidades.
+  `output/cv/cv_<nome>_<perfil><idioma><3 dígitos>.pdf` (perfil 1 python, 2 ia, 3 java;
+  idioma 1 pt, 2 en; desde 23/11/2026), com todas as habilidades. Desde 23/11/2026 não há
+  CV ajustado por vaga: cada vaga usa o CV fixo do seu tipo (no máximo 6 arquivos); o LLM só
+  escreve a carta.
 
 ---
 
@@ -332,12 +335,14 @@ imprensa, suporte, vendas), 64 têm página de carreiras e 85 têm descrição. 
 
 - `night-shift outreach` (e a etapa no `run`): varre o site de cada empresa (robots.txt
   respeitado, a cada 30 dias) atrás do e-mail público de RH, da página de carreiras e da
-  descrição; escreve até `llm.claude_daily_outreach` (10) mensagens por dia: **nota de
-  conexão do LinkedIn** (≤ 300 caracteres) e **e-mail** (≤ 130 palavras), validadas (sem
-  campo para preencher, com assinatura, sem tecnologia fora do CV e da descrição).
+  descrição; escreve até `llm.claude_daily_outreach` (10) **e-mails** por dia, validados (sem
+  campo para preencher, com assinatura, sem tecnologia fora do CV e da descrição). A nota de
+  conexão do LinkedIn foi removida em 23/11/2026: a abordagem a recrutadores no LinkedIn é
+  feita à mão, com mensagem única; o e-mail segue as regras e o modelo de `outreach` no
+  `profile.yaml` (abertura "Sou ...", sem cerimônia, sem citar ex-empregadores).
 - Prioridade: empresas com e-mail, depois fintech → banco digital → IA → fundo → tech.
   Sem recontato por 60 dias depois de enviada.
-- Aba **Outreach** do painel: nota e e-mail prontos para copiar, link para buscar
+- Aba **Outreach** do painel: e-mail pronto para copiar, link para buscar
   recrutadores da empresa no LinkedIn, página de carreiras, **Abrir no Gmail** com tudo
   preenchido (você anexa o CV e envia), **Marcar enviada**, **Descartar**, **Responderam**.
   Nada sai sozinho. A API do Gmail ficou para depois, se o volume de e-mail crescer.

@@ -11,16 +11,7 @@
     </p>
     {% if c.about %}<p class="muted about">{{ c.about }}</p>{% endif %}
 
-    <div class="msg">
-      <div class="msg-head">
-        <b>Nota do LinkedIn</b>
-        <span class="muted">{{ (o.linkedin_note or '') | length }}/300</span>
-        <button class="btn ghost small" type="button" onclick="copyText('note-{{ o.id }}', this)">Copiar</button>
-      </div>
-      <div class="msg-body" id="note-{{ o.id }}">{{ o.linkedin_note }}</div>
-    </div>
-
-    <details class="msg"{% if o.to_address %} open{% endif %}>
+    <details class="msg" open>
       <summary><b>E-mail</b>
         {% if o.to_address %}para <code>{{ o.to_address }}</code>
           {% if c.contact_source_url and c.contact_source_url.startswith('http') %}

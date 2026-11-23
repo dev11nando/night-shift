@@ -36,6 +36,7 @@ from night_shift.config import (
 from night_shift.domain.cv import default_cv, translation_problems
 from night_shift.domain.enums import RunStatus
 from night_shift.domain.filters import HardFilter
+from night_shift.domain.naming import stable_cv_name
 from night_shift.paths import STACK_FILES, ProjectPaths
 from night_shift.ports import SourceError
 from night_shift.runtime.job_object import IS_WINDOWS, is_store_python
@@ -364,10 +365,12 @@ def docs(
         None, "--limit", "-n", help="Máximo de vagas (padrão: llm.claude_daily_letters)."
     ),
     regenerate: bool = typer.Option(
-        False, "--regenerate", help="Apaga CV ajustado e carta das vagas na fila e gera de novo."
+        False,
+        "--regenerate",
+        help="Apaga a carta (e o vínculo com o CV) das vagas na fila e gera de novo.",
     ),
 ) -> None:
-    """Gera CV ajustado (PDF) e carta para as melhores vagas da fila."""
+    """Escolhe o CV do tipo da vaga e escreve a carta para as melhores vagas da fila."""
     if regenerate:
         with _pipeline(_paths()).sessions.begin() as s:
             typer.echo(f"{DocumentsRepository(s).clear_documents()} vaga(s) para gerar de novo")
@@ -411,13 +414,13 @@ def outreach(
     ),
 ) -> None:
     """Varre os sites das empresas (contato de RH, carreiras) e escreve mensagens de outreach
-    (nota do LinkedIn + e-mail). Nada é enviado: tudo fica na aba Outreach do painel."""
+    (e-mail). Nada é enviado: tudo fica na aba Outreach do painel."""
     _run_steps("outreach", lambda p, prof, pipe: _outreach_steps(p, prof, pipe, limit))
 
 
 @app.command()
 def run(top: int | None = TopOption, time_budget: int | None = BudgetOption) -> None:
-    """Pipeline da noite: coleta, filtro, similaridade, nota do LLM, CV ajustado e carta.
+    """Pipeline da noite: coleta, filtro, similaridade, nota do LLM, CV do tipo da vaga e carta.
 
     O limite de tempo vale para as etapas de LLM juntas (nota + documentos)."""
     _run_steps(
@@ -553,7 +556,7 @@ def apply(
     ),
 ) -> None:
     """Aplicação assistida: abre cada vaga da fila automática já preenchida (dados, CV
-    ajustado e carta). Você confere, completa o que faltar e clica em enviar; o sistema
+    do tipo da vaga e carta). Você confere, completa o que faltar e clica em enviar; o sistema
     reconhece a confirmação e marca a vaga como aplicada. Nunca envia sozinho."""
     from night_shift.adapters.applier.assisted import AssistedApplier, apply_url
     from night_shift.adapters.storage.applications import ApplyRepository
@@ -596,7 +599,7 @@ def apply(
     if not plan:
         typer.echo(
             "nada pronto na fila automática (precisa de nota >= "
-            f"{threshold}, sem alertas, e CV ajustado: rode `night-shift docs`)"
+            f"{threshold}, sem alertas, e com CV: rode `night-shift docs`)"
         )
         return
 
@@ -615,7 +618,7 @@ def apply(
                 break
             typer.echo(f"[{n}/{len(plan)}] {title} — {company}")
             if url is None or not cv_path:
-                typer.echo("  pulada: sem URL do formulário ou sem CV ajustado")
+                typer.echo("  pulada: sem URL do formulário ou sem CV")
                 continue
             cand = build_candidate(profile, cv, Path(cv_path), letter)
             outcome = applier.apply(job_id, url, cand, preview=preview)
@@ -828,20 +831,22 @@ def cv_check() -> None:
 @cv_app.command("pdf")
 def cv_pdf() -> None:
     """Gera o CV completo de cada perfil (python, ia, java), em PT e EN, sempre em uma
-    página, em output/cv/: curriculo-<perfil>.pdf e resume-<perfil>-en.pdf."""
+    página, em output/cv/: cv_<nome>_<perfil><idioma><3 dígitos>.pdf (perfil 1 python, 2 ia,
+    3 java; idioma 1 português, 2 inglês). São os CVs que as vagas usam; o nome se mantém."""
     paths = _paths()
     profile = _load_or_exit(load_profile, paths.profile_file)
+    folder = paths.cv_output_dir
+    folder.mkdir(parents=True, exist_ok=True)
     for stack, pt_file, en_file in _cv_profiles(paths):
-        for lang, source, name in (
-            ("pt", pt_file, f"curriculo-{stack}.pdf"),
-            ("en", en_file, f"resume-{stack}-en.pdf"),
-        ):
+        for lang, source in (("pt", pt_file), ("en", en_file)):
             if not source.exists():
                 continue
             cv = _load_or_exit(load_cv, source)
+            name = stable_cv_name(folder, profile.short_name, stack, lang)
             info = render_cv_pdf_info(
-                default_cv(cv), profile.name, profile.email, paths.cv_output_dir / name, lang
+                default_cv(cv), profile.name, profile.email, folder / name, lang
             )
+            name = f"{name}  ({stack}, {lang})"
             pages = page_count(info.path)
             notes = []
             if info.scale < 1:

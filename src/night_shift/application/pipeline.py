@@ -20,11 +20,9 @@ from night_shift.adapters.storage.outreach import OutreachRepository
 from night_shift.adapters.storage.repository import JobRepository, to_posting
 from night_shift.application.documents import (
     LETTER_SYSTEM,
-    TAILOR_SYSTEM,
     CoverLetter,
     job_language,
     letter_prompt,
-    tailor_prompt,
     validate_letter,
 )
 from night_shift.application.outreach import SYSTEM as OUTREACH_SYSTEM
@@ -41,11 +39,12 @@ from night_shift.application.scoring import (
     job_text,
 )
 from night_shift.config import CompanyConfig, CVMaster, Profile
-from night_shift.domain.cv import CVSelection, TailoredCV, apply_selection, default_cv
+from night_shift.domain.cv import TailoredCV, default_cv
 from night_shift.domain.enrich import enrich
 from night_shift.domain.enums import RunStatus
 from night_shift.domain.filters import HardFilter
 from night_shift.domain.job import JobPosting
+from night_shift.domain.naming import stable_cv_name
 from night_shift.domain.stacks import DEFAULT_STACK
 from night_shift.domain.text import fold
 from night_shift.ports import Embedder, JobSource, LLMProvider, LLMUnavailable, SourceError
@@ -64,6 +63,20 @@ def pick[T](values: dict[str, T], stack: str | None) -> T:
     if stack in values:
         return values[stack]
     return values.get(DEFAULT_STACK) or next(iter(values.values()))
+
+
+def base_cv_pdf(
+    folder: Path,
+    person: str,
+    stack: str,
+    lang: str,
+    cv: CVMaster,
+    render: Callable[[TailoredCV, Path, str], Path],
+) -> Path:
+    """O CV fixo de um tipo de vaga: reaproveita o arquivo se já existe; senão gera."""
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / stable_cv_name(folder, person, stack, lang)
+    return path if path.exists() else render(default_cv(cv), path, lang)
 
 
 def slugify(text: str) -> str:
@@ -251,14 +264,15 @@ class Pipeline:
         budget_seconds: float | None = None,
         cv_en: CVMaster | dict[str, CVMaster] | None = None,
     ) -> None:
-        """CV ajustado (PDF) e carta para as melhores vagas da fila que ainda não têm.
+        """CV e carta para as melhores vagas da fila que ainda não têm.
 
-        Vaga em inglês usa ``cv_en`` (mesmos IDs do mestre) quando existe; senão o mestre.
-
-        Seleção do CV rejeitada pelo validador: tenta de novo uma vez com o motivo, depois
-        usa o CV mestre sem ajuste. Carta rejeitada: tenta de novo uma vez, depois fica sem.
+        O CV não é gerado por vaga: cada vaga aponta para o CV fixo do seu TIPO (perfil da
+        stack e idioma), ``cv_<nome>_<perfil><idioma><3 dígitos>.pdf`` em ``out_dir``. São
+        no máximo 6 arquivos, gerados uma vez (ou por ``night-shift cv pdf``). Vaga em inglês
+        usa ``cv_en`` quando existe. A carta continua sendo escrita por vaga; rejeitada duas
+        vezes, a vaga fica sem carta.
         """
-        self.log(f"CV ajustado + carta ({llm.model}, nota >= {min_score}, até {limit})")
+        self.log(f"CV do tipo da vaga + carta ({llm.model}, nota >= {min_score}, até {limit})")
         self.start_budget(budget_seconds)
         self._progress("documentos")
         with self.sessions() as s:
@@ -272,13 +286,13 @@ class Pipeline:
             self._progress("documentos", f"[{n}/{len(ids)}] {job.title} — {job.company_name}")
 
             lang = job_language(job)
-            cv_pt = pick(per_stack(cv), job.stack)
-            en = pick(per_stack(cv_en), job.stack) if cv_en else None
+            stacks = per_stack(cv)
+            stack = job.stack if job.stack in stacks else DEFAULT_STACK
+            cv_pt = pick(stacks, stack)
+            en = pick(per_stack(cv_en), stack) if cv_en else None
             base, doc_lang = (en, "en") if lang == "en" and en else (cv_pt, "pt")
-            tailored = self._tailor(llm, base, job, doc_lang)
-            name = f"{job_id}-{slugify(job.company_name)}{'-en' if doc_lang == 'en' else ''}.pdf"
-            pdf = render(tailored, out_dir / name, doc_lang)
             letter = self._letter(llm, profile, base, job)
+            pdf = base_cv_pdf(out_dir, profile.short_name, stack, doc_lang, base, render)
 
             with self.sessions.begin() as s:
                 DocumentsRepository(s).save_documents(job_id, pdf, letter)
@@ -299,16 +313,6 @@ class Pipeline:
                 feedback = f"\n\nA tentativa anterior foi rejeitada: {e}. Corrija isso."
         self._error(f"{what} em '{label}': {last}")
         return None
-
-    def _tailor(
-        self, llm: LLMProvider, cv: CVMaster, job: JobPosting, lang: str = "pt"
-    ) -> TailoredCV:
-        def attempt(feedback: str) -> TailoredCV:
-            prompt = tailor_prompt(cv, job, lang) + feedback
-            sel = llm.complete_json(TAILOR_SYSTEM, prompt, CVSelection)
-            return apply_selection(cv, sel)
-
-        return self._two_tries("seleção do CV", job.title, attempt) or default_cv(cv)
 
     def _letter(
         self, llm: LLMProvider, profile: Profile, cv: CVMaster, job: JobPosting
@@ -355,7 +359,7 @@ class Pipeline:
         daily_limit: int,
         budget_seconds: float | None = None,
     ) -> None:
-        """Escreve mensagens de outreach (nota do LinkedIn + e-mail) para até ``daily_limit``
+        """Escreve e-mails de outreach para até ``daily_limit``
         empresas por dia. Nada é enviado: tudo fica no painel esperando você."""
         self.start_budget(budget_seconds)
         self._progress("outreach")
@@ -371,9 +375,9 @@ class Pipeline:
             self._progress("outreach", f"[{n}/{len(todo)}] {name}")
             prompt = outreach_prompt(profile, cv, name, sector, about)
 
-            def attempt(feedback: str, prompt=prompt, about=about):
+            def attempt(feedback: str, prompt=prompt, about=about, name=name):
                 msg = llm.complete_json(OUTREACH_SYSTEM, prompt + feedback, OutreachMessage)
-                return validate_outreach(msg, profile, cv, about)
+                return validate_outreach(msg, profile, cv, about, name)
 
             msg = self._two_tries("outreach", name, attempt)
             if msg is None:

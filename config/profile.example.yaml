@@ -54,6 +54,24 @@ application:                          # night-shift apply (aplicação assistida
     - {pattern: "relocation|mudan.a de cidade", answer: "Não preciso de mudança"}
   # CPF, raça, gênero, orientação, deficiência etc. NUNCA são preenchidos, mesmo se casarem.
 
+outreach:
+  # Seu modelo de e-mail para empresas sem vaga aberta. O LLM mantém a abertura, os
+  # parágrafos de experiência, o fechamento e a assinatura, e reescreve só o parágrafo que
+  # liga você à empresa. Sem modelo, o e-mail é escrito do zero.
+  signature: Fulano Silva
+  email_template: |
+    Sou Fulano Silva, engenheiro de software com experiência em backend com Python.
+
+    Na minha última experiência, trabalhei com microsserviços em FastAPI e AWS.
+
+    Acredito que essa experiência tenha bastante conexão com o contexto da Empresa.
+
+    Gostaria de me colocar à disposição para conversar sobre oportunidades. Encaminho meu
+    currículo em anexo.
+
+    Atenciosamente,
+    Fulano Silva.
+
 turn_off:
   grace_seconds: 30
   stop_ollama: false
