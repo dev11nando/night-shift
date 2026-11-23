@@ -15,7 +15,8 @@ MAX_EMAIL_WORDS = 160
 
 SYSTEM = (
     "Você escreve mensagens curtas de networking para um engenheiro de software que procura "
-    "emprego. Diretas, específicas sobre a empresa, sem bajulação e sem inventar nada. "
+    "emprego. Diretas e objetivas, focadas na experiência dele, específicas sobre a empresa, "
+    "sem cerimônia, sem bajulação e sem inventar nada. "
     "Responda apenas com o JSON pedido."
 )
 
@@ -52,22 +53,28 @@ def signature(profile: Profile) -> str:
 
 
 def _email_instructions(profile: Profile, company: str) -> str:
+    sig = signature(profile)
+    rules = f"""- email_body: e-mail para a caixa de recrutamento da {company}. Regras fixas do
+  candidato:
+  * comece direto por "Sou {sig}, ..." (é assim que ele se apresenta); nada de saudação
+    ou cerimônia antes ("Olá, equipe de recrutamento", "Prezados", "Espero que esteja bem");
+  * tom direto e objetivo, focado no que ele fez: frases concretas sobre a experiência,
+    sem floreio, adjetivos vazios ("apaixonado", "entusiasmado") ou bajulação da empresa;
+  * fale da experiência, não do empregador: nunca cite o nome das empresas onde ele
+    trabalhou ("na minha última experiência, trabalhei com...");
+  * ligue a experiência à {company} com algo específico do setor ou da descrição dela (sem
+    "pelo que a empresa diz de si"); sem descrição, fale só do setor;
+  * feche colocando-se à disposição para conversar e dizendo que o currículo vai anexo;
+  * termine exatamente com "Atenciosamente," e, na linha de baixo, "{sig}.\""""
     template = (profile.outreach.email_template or "").strip()
     if not template:
-        return f"""- email_body: até 130 palavras, 2 ou 3 parágrafos curtos, para a caixa de
-  recrutamento da empresa. Comece direto por "Sou {signature(profile)}, ..." (sem saudação
-  como "Olá, equipe"): quem é, 1 ou 2 realizações reais do currículo, por que a {company}
-  (algo específico do setor ou da descrição), disponibilidade para conversar e que o CV vai
-  anexo. Termine com "Atenciosamente," e "{signature(profile)}"."""
-    return f"""- email_body: use o MODELO DO CANDIDATO abaixo como base. Mantenha a abertura, os
-  parágrafos sobre a experiência, o fechamento e a assinatura praticamente iguais (pode
-  mudar a ordem ou o destaque dos itens de experiência para o que mais conversa com a
-  {company}, só com fatos do modelo ou do currículo). Reescreva o parágrafo que liga o
-  candidato à empresa para a {company}, com algo específico do setor ou da descrição dela,
-  no mesmo tamanho do parágrafo do modelo (1 ou 2 frases, sem "pelo que a empresa diz de
-  si"); se não houver descrição, fale só do setor. Não acrescente saudação no início.
+        return rules + "\n  * até 130 palavras, 3 ou 4 parágrafos curtos."
+    return f"""{rules}
+  * use o MODELO DO CANDIDATO abaixo como referência de estrutura, tom e tamanho. Não é
+    para copiar: escolha as palavras e quais experiências destacar conforme a {company},
+    só com fatos do modelo ou do currículo. Empresa citada no modelo é só exemplo.
 
-### Modelo do candidato
+### Modelo do candidato (referência)
 {template}"""
 
 
@@ -93,8 +100,8 @@ Não há vaga específica: o objetivo é abrir uma conversa sobre oportunidades 
 - subject: assunto curto do e-mail, sem clichê.
 {_email_instructions(profile, company)}
 
-Regras: no e-mail, NÃO cite o nome das empresas onde o candidato trabalhou (fale da
-experiência: "na minha última experiência", "atuei com..."); experiência com data de fim já
+Regras: na nota e no e-mail, NÃO cite o nome das empresas onde o candidato trabalhou (fale
+da experiência: "na minha última experiência", "atuei com..."); experiência com data de fim já
 acabou (fale no passado); não aponte lacunas; não invente experiência, número, tecnologia ou
 fato sobre a empresa; nada de colchetes ou campos para preencher; português do Brasil."""
 
@@ -128,12 +135,19 @@ def validate_outreach(
     for text in (note, body, msg.subject):
         if re.search(r"\[[^\]]*\]|\{[^}]*\}|<[^>]*>", text):
             raise OutreachError("mensagem com campo para preencher")
+    sig = signature(profile)
     if GENERIC_OPENING.match(body):
-        raise OutreachError("e-mail abre com saudação genérica; comece direto por 'Sou ...'")
-    if fold(signature(profile).split()[0]) not in fold(body):
-        raise OutreachError("e-mail sem a assinatura do candidato")
-    if cited := _employers_cited(body, cv, company):
-        raise OutreachError(f"e-mail cita empresa onde o candidato trabalhou: {', '.join(cited)}")
+        raise OutreachError(f"e-mail abre com saudação genérica; comece direto por 'Sou {sig}'")
+    if not fold(body).startswith(fold(f"Sou {sig}")):
+        raise OutreachError(f"e-mail precisa começar por 'Sou {sig}, ...'")
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+    closing = [fold(ln).rstrip(",.! ") for ln in lines[-2:]]
+    if closing != ["atenciosamente", fold(sig)]:
+        raise OutreachError(
+            f"e-mail precisa terminar com 'Atenciosamente,' e a assinatura '{sig}.'"
+        )
+    if cited := _employers_cited(f"{note}\n{body}", cv, company):
+        raise OutreachError(f"cita empresa onde o candidato trabalhou: {', '.join(cited)}")
     allowed = f"{about or ''}\n{template}"
     invented = [t for t in invented_terms(f"{note}\n{body}", cv) if not contains_term(allowed, t)]
     if invented:

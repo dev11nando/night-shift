@@ -126,16 +126,20 @@ def test_discover_site_down():
 
 # ---------------------------------------------------------------- mensagem
 
+END = "\n\nAtenciosamente,\nMarcos Fernando."
+
+
+def body(middle: str) -> str:
+    return f"Sou Marcos Fernando, backend Python.\n\n{middle}{END}"
+
+
 GOOD = OutreachMessage(
     linkedin_note=(
         "Oi! Sou backend Python e construí análise de crédito com LLMs. "
         "Adoraria conversar sobre o time de vocês."
     ),
     subject="Backend Python com experiência em crédito",
-    email_body=(
-        "Sou Marcos, backend Python.\n\nConstruí APIs em Python e análise de crédito com LLMs."
-        "\n\nAtenciosamente,\nMarcos Fernando"
-    ),
+    email_body=body("Construí APIs em Python e análise de crédito com LLMs."),
 )
 
 
@@ -147,12 +151,14 @@ def test_valid_message():
     ("update", "message"),
     [
         ({"linkedin_note": "x" * 301}, "301 caracteres"),
-        ({"email_body": "palavra " * 170 + "Marcos"}, "longo demais"),
-        ({"email_body": "Sou [Nome],\n\nMarcos"}, "campo para preencher"),
-        ({"email_body": "Sou backend Python.\n\nAbraço"}, "assinatura"),
-        ({"email_body": "Olá, equipe de recrutamento!\n\nSou Marcos."}, "saudação genérica"),
-        ({"email_body": "Prezados,\n\nSou Marcos."}, "saudação genérica"),
-        ({"email_body": "Sou Marcos e trabalhei na IORQ com crédito."}, "IORQ"),
+        ({"email_body": body("palavra " * 170)}, "longo demais"),
+        ({"email_body": body("Atuei na [Empresa].")}, "campo para preencher"),
+        ({"email_body": "Olá, equipe de recrutamento!\n\nSou Marcos." + END}, "saudação genérica"),
+        ({"email_body": "Prezados,\n\nSou Marcos." + END}, "saudação genérica"),
+        ({"email_body": "Meu nome é Marcos Fernando." + END}, "começar por 'Sou Marcos"),
+        ({"email_body": "Sou Marcos Fernando, backend.\n\nAbraço,\nMarcos"}, "Atenciosamente"),
+        ({"email_body": body("Trabalhei na IORQ com crédito.")}, "IORQ"),
+        ({"linkedin_note": "Na Quatá fiz APIs em Python."}, "Quatá"),
         ({"linkedin_note": "Tenho anos de Kotlin."}, "kotlin"),
     ],
 )
@@ -173,26 +179,34 @@ TEMPLATED = Profile(
 )
 
 
-def test_template_goes_into_prompt():
+def test_rules_and_template_go_into_prompt():
     prompt = outreach_prompt(TEMPLATED, CV, "Acme", "fintech", None)
-    assert "Modelo do candidato" in prompt and "Na minha última experiência" in prompt
-    assert "NÃO cite o nome das empresas" in prompt
+    assert "Modelo do candidato (referência)" in prompt and "Não é\n    para copiar" in prompt
+    assert 'Sou Marcos Paixao, ..."' in prompt and '"Marcos Paixao."' in prompt
+    assert "direto e objetivo" in prompt and "NÃO cite o nome das empresas" in prompt
     plain = outreach_prompt(PROFILE, CV, "Acme", "fintech", None)
-    assert "Modelo do candidato" not in plain and 'Comece direto por "Sou Marcos' in plain
+    assert "Modelo do candidato" not in plain and "Sou Marcos Fernando Araujo" not in plain
+    assert 'Sou Marcos Fernando, ..."' in plain
 
 
 def test_template_terms_and_length_are_allowed():
     msg = GOOD.model_copy(update={"email_body": TEMPLATE.replace("Empresa", "Acme")})
     assert validate_outreach(msg, TEMPLATED, CV, None, "Acme"), "Terraform vem do modelo"
     long_template = TEMPLATED.model_copy(
-        update={"outreach": OutreachConfig(email_template=TEMPLATE + " palavra" * 170)}
+        update={
+            "outreach": OutreachConfig(
+                email_template=TEMPLATE + " palavra" * 170, signature="Marcos Paixao"
+            )
+        }
     )
-    long_body = GOOD.model_copy(update={"email_body": TEMPLATE + " palavra" * 180})
+    long_body = GOOD.model_copy(
+        update={"email_body": TEMPLATE.replace("Python.", "Python." + " palavra" * 180)}
+    )
     assert validate_outreach(long_body, long_template, CV, None, "Acme"), "limite segue o modelo"
 
 
 def test_target_company_that_was_an_employer_can_be_named():
-    msg = GOOD.model_copy(update={"email_body": "Sou Marcos e quero voltar à IORQ.\n\nMarcos"})
+    msg = GOOD.model_copy(update={"email_body": body("Quero voltar à IORQ.")})
     assert validate_outreach(msg, PROFILE, CV, None, "IORQ")
 
 
