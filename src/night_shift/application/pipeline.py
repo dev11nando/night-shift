@@ -371,9 +371,9 @@ class Pipeline:
             self._progress("outreach", f"[{n}/{len(todo)}] {name}")
             prompt = outreach_prompt(profile, cv, name, sector, about)
 
-            def attempt(feedback: str, prompt=prompt, about=about):
+            def attempt(feedback: str, prompt=prompt, about=about, name=name):
                 msg = llm.complete_json(OUTREACH_SYSTEM, prompt + feedback, OutreachMessage)
-                return validate_outreach(msg, profile, cv, about)
+                return validate_outreach(msg, profile, cv, about, name)
 
             msg = self._two_tries("outreach", name, attempt)
             if msg is None:

@@ -17,10 +17,11 @@ from night_shift.application.outreach import (
     OutreachError,
     OutreachMessage,
     linkedin_people_search,
+    outreach_prompt,
     validate_outreach,
 )
 from night_shift.application.pipeline import Pipeline
-from night_shift.config import CompanyConfig, Profile
+from night_shift.config import CompanyConfig, OutreachConfig, Profile
 from night_shift.domain.contacts import pick_contact, recruiting_rank, same_company
 from night_shift.domain.enums import OutreachStatus
 from night_shift.runtime.stop_flag import StopFlag
@@ -132,7 +133,8 @@ GOOD = OutreachMessage(
     ),
     subject="Backend Python com experiência em crédito",
     email_body=(
-        "Olá, time.\n\nConstruí APIs em Python e análise de crédito com LLMs.\n\nMarcos Fernando"
+        "Sou Marcos, backend Python.\n\nConstruí APIs em Python e análise de crédito com LLMs."
+        "\n\nAtenciosamente,\nMarcos Fernando"
     ),
 )
 
@@ -146,14 +148,52 @@ def test_valid_message():
     [
         ({"linkedin_note": "x" * 301}, "301 caracteres"),
         ({"email_body": "palavra " * 170 + "Marcos"}, "longo demais"),
-        ({"email_body": "Olá [Nome],\n\nMarcos"}, "campo para preencher"),
-        ({"email_body": "Olá, time.\n\nAbraço"}, "assinatura"),
+        ({"email_body": "Sou [Nome],\n\nMarcos"}, "campo para preencher"),
+        ({"email_body": "Sou backend Python.\n\nAbraço"}, "assinatura"),
+        ({"email_body": "Olá, equipe de recrutamento!\n\nSou Marcos."}, "saudação genérica"),
+        ({"email_body": "Prezados,\n\nSou Marcos."}, "saudação genérica"),
+        ({"email_body": "Sou Marcos e trabalhei na IORQ com crédito."}, "IORQ"),
         ({"linkedin_note": "Tenho anos de Kotlin."}, "kotlin"),
     ],
 )
 def test_invalid_messages(update, message):
     with pytest.raises(OutreachError, match=message):
         validate_outreach(GOOD.model_copy(update=update), PROFILE, CV, None)
+
+
+TEMPLATE = (
+    "Sou Marcos Paixao, engenheiro de software backend com Python.\n\n"
+    "Na minha última experiência, trabalhei com FastAPI e Terraform.\n\n"
+    "Acredito que tenha conexão com a Empresa.\n\nAtenciosamente,\nMarcos Paixao."
+)
+TEMPLATED = Profile(
+    name="Marcos Fernando Araujo da Paixao",
+    email="m@x.com",
+    outreach={"email_template": TEMPLATE, "signature": "Marcos Paixao"},
+)
+
+
+def test_template_goes_into_prompt():
+    prompt = outreach_prompt(TEMPLATED, CV, "Acme", "fintech", None)
+    assert "Modelo do candidato" in prompt and "Na minha última experiência" in prompt
+    assert "NÃO cite o nome das empresas" in prompt
+    plain = outreach_prompt(PROFILE, CV, "Acme", "fintech", None)
+    assert "Modelo do candidato" not in plain and 'Comece direto por "Sou Marcos' in plain
+
+
+def test_template_terms_and_length_are_allowed():
+    msg = GOOD.model_copy(update={"email_body": TEMPLATE.replace("Empresa", "Acme")})
+    assert validate_outreach(msg, TEMPLATED, CV, None, "Acme"), "Terraform vem do modelo"
+    long_template = TEMPLATED.model_copy(
+        update={"outreach": OutreachConfig(email_template=TEMPLATE + " palavra" * 170)}
+    )
+    long_body = GOOD.model_copy(update={"email_body": TEMPLATE + " palavra" * 180})
+    assert validate_outreach(long_body, long_template, CV, None, "Acme"), "limite segue o modelo"
+
+
+def test_target_company_that_was_an_employer_can_be_named():
+    msg = GOOD.model_copy(update={"email_body": "Sou Marcos e quero voltar à IORQ.\n\nMarcos"})
+    assert validate_outreach(msg, PROFILE, CV, None, "IORQ")
 
 
 def test_company_stack_from_about_is_allowed():

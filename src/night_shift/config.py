@@ -141,9 +141,18 @@ class TurnOffConfig(BaseModel):
     stop_ollama: bool = False
 
 
+class OutreachConfig(BaseModel):
+    """Seu modelo de e-mail de outreach: o LLM mantém a estrutura e o tom e só adapta o
+    parágrafo que liga você à empresa. ``signature`` é como você assina (padrão: o nome)."""
+
+    email_template: str | None = None
+    signature: str | None = None
+
+
 class Profile(BaseModel):
     name: str
     email: str
+    outreach: OutreachConfig = OutreachConfig()
     preferences: Preferences = Preferences()
     automation: AutomationConfig = AutomationConfig()
     llm: LLMConfig = LLMConfig()
