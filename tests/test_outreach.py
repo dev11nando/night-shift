@@ -381,11 +381,11 @@ def test_outreach_page_and_actions(sessions):
     client = TestClient(create_app(sessions))
 
     html = client.get("/outreach").text
-    assert "Para enviar (1)" in html and "Com RH" in html
+    assert "Com e-mail (1)" in html and "Sem e-mail (0)" in html and "Com RH" in html
     assert "Sou Marcos Fernando" in html and "Abrir no Gmail" in html
     assert "Nota do LinkedIn" not in html
     assert "https://a.com/carreiras" in html and "linkedin.com/search" in html
-    assert 'Outreach <span class="pill">1</span>' in html
+    assert 'title="e-mails prontos para enviar">1</span>' in html
 
     assert client.post(f"/outreach/{oid}/sent").status_code == 403
     sent = client.post(f"/outreach/{oid}/sent", headers=HX).text
@@ -400,3 +400,19 @@ def test_outreach_page_and_actions(sessions):
         assert s.get(Outreach, oid).company.last_contacted_at is None
     assert client.post(f"/outreach/{oid}/nada", headers=HX).status_code == 404
     assert client.post("/outreach/999/sent", headers=HX).status_code == 404
+
+
+def test_outreach_tabs_split_drafts_by_email(sessions):
+    ids = add_companies(sessions)
+    with sessions.begin() as s:
+        repo = OutreachRepository(s)
+        repo.save_message(s.get(Company, ids["Com RH"]), GOOD)
+        repo.save_message(s.get(Company, ids["Fintech"]), GOOD)
+    client = TestClient(create_app(sessions))
+
+    default = client.get("/outreach").text
+    assert "Com e-mail (1)" in default and "Sem e-mail (1)" in default
+    assert "Com RH" in default and "Fintech" not in default.split("<main>")[1]
+    sem = client.get("/outreach?view=sem-email").text
+    assert "Fintech" in sem and "recrutadores no LinkedIn" in sem
+    assert client.get("/outreach?view=pendentes").status_code == 200, "link antigo continua"

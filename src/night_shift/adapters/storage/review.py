@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, timedelta
 from statistics import median
 
 from sqlalchemy import func, or_, select
@@ -10,6 +11,10 @@ from sqlalchemy.orm import Session, joinedload
 from night_shift.adapters.storage.models import Application, Job, Run, Score, utcnow
 from night_shift.domain.enums import SOURCE_RISK, ApplicationStatus, Contract, Level
 from night_shift.domain.lanes import Lane, lane_for
+from night_shift.domain.text import fold
+
+ORDERS = ("nota", "recentes", "empresa")
+APPLIED = (ApplicationStatus.APPLIED_MANUAL, ApplicationStatus.AUTO_APPLIED)
 
 
 @dataclass(frozen=True)
@@ -67,15 +72,49 @@ class ReviewRepository:
         min_score: int = 0,
         limit: int = 100,
         stack: str | None = None,
+        search: str = "",
+        order: str = "nota",
     ) -> list[Score]:
-        """Vagas avaliadas ainda sem decisão, da maior nota para a menor, opcionalmente só
-        de uma fila e de uma stack. A fila é calculada na hora, então o filtro é em Python."""
-        pending = self._pending(min_score)
+        """Vagas avaliadas ainda sem decisão, opcionalmente só de uma fila, de uma stack e
+        com ``search`` no cargo ou na empresa (sem acento, sem caixa). Ordem: ``nota`` (maior
+        primeiro), ``recentes`` (coletadas por último) ou ``empresa`` (A a Z). A fila é
+        calculada na hora, então o filtro é em Python."""
+        pending = list(self._pending(min_score))
         if lane is not None:
             pending = [sc for sc in pending if self.lane(sc) is lane]
         if stack:
             pending = [sc for sc in pending if sc.job.stack == stack]
-        return list(pending[:limit])
+        if terms := fold(search).split():
+            pending = [
+                sc
+                for sc in pending
+                if all(t in fold(f"{sc.job.title} {sc.job.company_name}") for t in terms)
+            ]
+        if order == "recentes":
+            pending.sort(key=lambda sc: sc.job.collected_at, reverse=True)
+        elif order == "empresa":
+            pending.sort(key=lambda sc: (fold(sc.job.company_name), -(sc.llm_score or 0)))
+        return pending[:limit]
+
+    def fresh_best(self, days: int = 7, limit: int = 5) -> list[Score]:
+        """Melhores vagas da fila que receberam nota nos últimos ``days`` dias."""
+        since = utcnow() - timedelta(days=days)
+        fresh = [sc for sc in self._pending() if sc.scored_at and _aware(sc.scored_at) >= since]
+        return fresh[:limit]
+
+    def awaiting_reply(self, days: int = 7) -> list[Application]:
+        """Candidaturas enviadas há ``days`` dias ou mais que continuam sem resposta: hora
+        de cobrar."""
+        cutoff = utcnow() - timedelta(days=days)
+        apps = self.s.scalars(
+            select(Application)
+            .options(joinedload(Application.job))
+            .where(Application.status.in_(APPLIED))
+        ).all()
+        return sorted(
+            (a for a in apps if _aware(a.applied_at or a.updated_at) <= cutoff),
+            key=lambda a: a.applied_at or a.updated_at,
+        )
 
     def decided(self, statuses: tuple[ApplicationStatus, ...], limit: int = 100) -> Sequence[Score]:
         q = self._scored().where(Application.status.in_(statuses))
@@ -170,3 +209,8 @@ class ReviewRepository:
             .order_by(Job.salary_min.desc().nulls_last())
             .limit(limit)
         ).all()
+
+
+def _aware(value):
+    """O SQLite devolve datetime sem fuso; gravamos sempre em UTC."""
+    return value if value.tzinfo else value.replace(tzinfo=UTC)

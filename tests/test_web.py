@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from night_shift.adapters.storage import db
 from night_shift.adapters.storage.models import Application, Job, Run, Score, utcnow
+from night_shift.adapters.storage.review import ReviewRepository
 from night_shift.domain.enums import (
     ApplicationStatus,
     Contract,
@@ -86,17 +87,36 @@ def seeded(sessions):
 
 
 def test_empty_pages_render(client):
-    assert "Nenhuma execução ainda" in client.get("/").text
+    hoje = client.get("/").text
+    assert "nenhuma busca ainda" in hoje and "A fila está vazia" in hoje
     assert "Nada na fila manual" in client.get("/fila").text
     assert "Nenhuma vaga com salário" in client.get("/mercado").text
 
 
 def test_hoje_shows_last_run_funnel_errors_and_best(client, seeded):
     html = client.get("/").text
-    assert "Última execução" in html
+    assert "última busca" in html and "Execução #" in html
     assert "120" in html and "coletadas" in html
     assert "gupy: layout mudou" in html
     assert html.index("Backend Python Pleno") < html.index("Desenvolvedor Python")
+
+
+def test_hoje_tiles_link_to_what_needs_you(client, seeded):
+    html = client.get("/").text
+    assert 'href="/outreach?view=com-email"' in html and "pronto" in html
+    assert 'href="/fila?ordem=recentes"' in html and "na fila" in html
+    assert "sem resposta há 7+ dias" in html
+
+
+def test_fila_search_and_order(client, seeded):
+    html = client.get("/fila?view=manual&q=gupy").text
+    assert "Python Gupy" in html and "Engenheiro de Software" not in html
+    assert "1 vaga com “gupy”" in html
+    none = client.get("/fila?view=manual&q=cobol").text
+    assert "Nenhuma vaga com “cobol”" in none
+    by_company = client.get("/fila?view=manual&ordem=empresa").text
+    assert 'id="results"' in by_company and 'value="empresa" selected' in by_company
+    assert client.get("/fila?ordem=aleatoria").status_code == 422
 
 
 def test_manual_queue_is_default_sorted_and_explains_why(client, seeded):
@@ -393,3 +413,27 @@ def test_header_buttons_and_buscar_redirects_to_live(sessions):
 def test_header_buttons_hidden_without_handlers(client):
     html = client.get("/").text
     assert "/buscar" not in html and ">Desligar</button>" not in html
+
+
+def test_hoje_lists_applications_waiting_for_reply(client, seeded, sessions):
+    with sessions.begin() as s:
+        repo = ReviewRepository(s)
+        repo.decide(seeded["mid"], ApplicationStatus.APPLIED_MANUAL)
+        repo.decide(seeded["low"], ApplicationStatus.APPLIED_MANUAL)
+        old = s.scalars(select(Application).where(Application.job_id == seeded["mid"])).one()
+        old.applied_at = utcnow() - timedelta(days=10)
+    html = client.get("/").text
+    assert "Esperando resposta" in html
+    section = html[html.index("Esperando resposta") :]
+    assert "Desenvolvedor Python" in section, "aplicada há 10 dias"
+    assert "Engenheiro de Software" not in section, "aplicada hoje ainda não precisa cobrar"
+
+
+def test_fresh_best_only_counts_recent_scores(sessions, seeded):
+    with sessions.begin() as s:
+        for sc in s.scalars(select(Score)):
+            sc.scored_at = utcnow() - timedelta(days=30)
+        recent = s.scalars(select(Score).where(Score.job_id == seeded["gupy"])).one()
+        recent.scored_at = utcnow()
+    with sessions() as s:
+        assert [sc.job.title for sc in ReviewRepository(s).fresh_best()] == ["Python Gupy"]

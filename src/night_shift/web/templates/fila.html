@@ -4,8 +4,9 @@
 <div class="section-head">
   <h1>Fila</h1>
   <div class="tabs">
-    <a href="/fila?view=manual&min={{ min_score }}&stack={{ stack }}" class="{{ 'active' if view == 'manual' }}">Manual ({{ counts.manual }})</a>
-    <a href="/fila?view=auto&min={{ min_score }}&stack={{ stack }}" class="{{ 'active' if view == 'auto' }}">Automática ({{ counts.auto }})</a>
+    {% set keep = 'min=' ~ min_score ~ '&stack=' ~ stack ~ '&ordem=' ~ ordem ~ '&q=' ~ (q | urlencode) %}
+    <a href="/fila?view=manual&{{ keep }}" class="{{ 'active' if view == 'manual' }}">Manual ({{ counts.manual }})</a>
+    <a href="/fila?view=auto&{{ keep }}" class="{{ 'active' if view == 'auto' }}">Automática ({{ counts.auto }})</a>
     <a href="/fila?view=aplicadas" class="{{ 'active' if view == 'aplicadas' }}">Aplicadas ({{ counts.applied }})</a>
     <a href="/fila?view=descartadas" class="{{ 'active' if view == 'descartadas' }}">Descartadas ({{ counts.discarded }})</a>
   </div>
@@ -21,17 +22,30 @@ ou descarte as que não quiser.</p>
 {% endif %}
 
 {% if view in ('manual', 'auto') %}
-<form class="filter" method="get" action="/fila">
+{# Filtra na hora: o htmx pede a página com os filtros e troca só a lista (#results). #}
+<form class="filter" method="get" action="/fila"
+      hx-get="/fila" hx-target="#results" hx-select="#results" hx-swap="outerHTML"
+      hx-push-url="true" hx-trigger="input changed delay:300ms from:input[name=q], change">
   <input type="hidden" name="view" value="{{ view }}">
+  <label class="grow">Buscar
+    <input type="search" name="q" value="{{ q }}" placeholder="cargo ou empresa" autocomplete="off">
+  </label>
+  <label>Ordem
+    <select name="ordem">
+      {% for value, label in (('nota', 'maior nota'), ('recentes', 'mais recentes'), ('empresa', 'empresa A–Z')) %}
+        <option value="{{ value }}" {{ 'selected' if value == ordem }}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
   <label>Nota mínima
-    <select name="min" onchange="this.form.submit()">
+    <select name="min">
       {% for v in (0, 50, 60, 70, 80) %}
         <option value="{{ v }}" {{ 'selected' if v == min_score }}>{{ v }}</option>
       {% endfor %}
     </select>
   </label>
   <label>Stack
-    <select name="stack" onchange="this.form.submit()">
+    <select name="stack">
       {% for value, label in (('', 'todas'), ('python', 'Python'), ('ia', 'IA / LLM'), ('java', 'Java')) %}
         <option value="{{ value }}" {{ 'selected' if value == stack }}>{{ label }}</option>
       {% endfor %}
@@ -40,16 +54,25 @@ ou descarte as que não quiser.</p>
 </form>
 {% endif %}
 
+<div id="results">
+{% if view in ('manual', 'auto') and (q or stack or min_score) %}
+  <p class="muted result-count">{{ scores | length }} vaga{{ 's' if scores | length != 1 }}{% if q %} com “{{ q }}”{% endif %}</p>
+{% endif %}
 {% for sc in scores %}
   {% include "_card.html" %}
 {% else %}
   <section class="empty">
     {% if view in ('manual', 'auto') %}
-      <p>Nada na fila {{ 'automática' if view == 'auto' else 'manual' }}{% if min_score %} com nota ≥ {{ min_score }}{% endif %}.</p>
-      <p class="muted">As vagas entram aqui depois que o LLM dá nota (<code>night-shift run</code> ou <code>rank</code>).</p>
+      {% if q %}
+        <p>Nenhuma vaga com “{{ q }}” nesta fila.</p>
+      {% else %}
+        <p>Nada na fila {{ 'automática' if view == 'auto' else 'manual' }}{% if min_score %} com nota ≥ {{ min_score }}{% endif %}.</p>
+        <p class="muted">As vagas entram aqui depois que o LLM dá nota (<code>night-shift run</code> ou <code>rank</code>).</p>
+      {% endif %}
     {% else %}
       <p>Nenhuma vaga {{ view }} ainda.</p>
     {% endif %}
   </section>
 {% endfor %}
+</div>
 {% endblock %}
