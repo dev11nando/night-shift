@@ -25,15 +25,15 @@
         <button class="btn ghost small" type="button" onclick="copyText('email-{{ o.id }}', this)">Copiar e-mail</button>
         {% if o.to_address %}
         <a class="btn small" target="_blank" rel="noopener"
-           href="{{ gmail_compose(o.to_address, o.subject, o.body) }}">Abrir no Gmail</a>
+           href="{{ gmail_compose(o.to_address, o.subject, o.body) }}" data-key="a" title="Abrir no Gmail (a)">Abrir no Gmail</a>
         {% endif %}
       </div>
     </details>
   </div>
   <div class="actions">
     {% if o.status == 'draft' %}
-      <button class="btn primary" hx-post="/outreach/{{ o.id }}/sent" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML">Marcar enviada</button>
-      <button class="btn ghost" hx-post="/outreach/{{ o.id }}/discard" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML">Descartar</button>
+      <button class="btn primary" hx-post="/outreach/{{ o.id }}/sent" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML" data-key="d" title="Marcar enviada (d)">Marcar enviada</button>
+      <button class="btn ghost" hx-post="/outreach/{{ o.id }}/discard" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML" data-key="x" title="Descartar (x)">Descartar</button>
     {% elif o.status == 'sent' %}
       <button class="btn" hx-post="/outreach/{{ o.id }}/replied" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML">Responderam</button>
       <button class="btn ghost" hx-post="/outreach/{{ o.id }}/undo" hx-target="#outreach-{{ o.id }}" hx-swap="outerHTML">Desfazer</button>

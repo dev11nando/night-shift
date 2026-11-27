@@ -437,3 +437,29 @@ def test_fresh_best_only_counts_recent_scores(sessions, seeded):
         recent.scored_at = utcnow()
     with sessions() as s:
         assert [sc.job.title for sc in ReviewRepository(s).fresh_best()] == ["Python Gupy"]
+
+
+def toast_of(resp) -> dict:
+    import json
+
+    return json.loads(resp.headers["HX-Trigger"])["toast"]
+
+
+def test_decisions_send_a_toast_with_undo(client, seeded):
+    job = seeded["top"]
+    done = toast_of(client.post(f"/jobs/{job}/done", headers=HX))
+    assert done["message"] == "Marcada como aplicada: Backend Python Pleno · Fintech X"
+    assert done["undo"] == f"/jobs/{job}/undo" and done["card"] == f"#job-{job}"
+    assert "target" not in done, "no HX-Trigger, target é do htmx"
+    gone = toast_of(client.post(f"/jobs/{seeded['mid']}/discard", headers=HX))
+    assert gone["message"].startswith("Descartada:") and gone["undo"]
+    back = toast_of(client.post(f"/jobs/{job}/undo", headers=HX))
+    assert back["message"].startswith("De volta na fila") and back["undo"] is None
+
+
+def test_compact_card_and_shortcuts(client, seeded):
+    html = client.get("/fila?view=manual").text
+    assert 'class="card compact"' in html and '<details class="more">' in html
+    assert 'data-key="d"' in html and 'data-key="x"' in html and 'data-key="a"' in html
+    assert 'id="shortcuts"' in html and 'id="toasts"' in html and "app.js?v=" in html
+    assert client.get("/static/app.js").status_code == 200

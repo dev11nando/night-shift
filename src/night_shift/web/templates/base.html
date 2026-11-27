@@ -6,6 +6,7 @@
   <title>{% block title %}night-shift{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}?v={{ asset_version }}">
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+  <script src="{{ url_for('static', path='app.js') }}?v={{ asset_version }}" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -20,7 +21,7 @@
     </nav>
     <div class="top-actions">
       {% if can_start %}
-      <button class="btn primary small" hx-post="/buscar"
+      <button class="btn primary small" hx-post="/buscar" data-key="b" title="Buscar vagas (b)"
               hx-confirm="Buscar vagas agora? Coleta, dá nota e escreve cartas e e-mails. Usa o limite do seu plano Claude.">Buscar vagas</button>
       {% endif %}
       {% if can_turn_off %}
@@ -32,7 +33,27 @@
   <main>
     {% block content %}{% endblock %}
   </main>
-  <footer>v{{ version }} · dados locais em data/night-shift.db</footer>
+  <footer>v{{ version }} · dados locais em data/night-shift.db ·
+    <button class="linklike" type="button" onclick="document.getElementById('shortcuts').showModal()">atalhos (?)</button></footer>
+  <div id="toasts" aria-live="polite"></div>
+  <dialog id="shortcuts">
+    <h2>Atalhos de teclado</h2>
+    <dl class="keys">
+      <dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>próximo / anterior cartão</dd>
+      <dt><kbd>o</kbd> ou <kbd>Enter</kbd></dt><dd>abre ou fecha os detalhes</dd>
+      <dt><kbd>a</kbd></dt><dd>abre a vaga em outra aba</dd>
+      <dt><kbd>c</kbd></dt><dd>abre o CV da vaga</dd>
+      <dt><kbd>d</kbd></dt><dd>Done (Fila) · Marcar enviada (Outreach)</dd>
+      <dt><kbd>x</kbd></dt><dd>descartar</dd>
+      <dt><kbd>z</kbd></dt><dd>desfaz a última ação</dd>
+      <dt><kbd>/</kbd></dt><dd>busca na Fila</dd>
+      <dt><kbd>b</kbd></dt><dd>Buscar vagas (pede confirmação)</dd>
+      <dt><kbd>g</kbd> + <kbd>h</kbd> <kbd>v</kbd> <kbd>f</kbd> <kbd>u</kbd> <kbd>o</kbd> <kbd>m</kbd></dt>
+      <dd>vai para Hoje, Ao vivo, Fila, Funil, Outreach, Mercado</dd>
+      <dt><kbd>?</kbd> · <kbd>Esc</kbd></dt><dd>mostra / fecha esta ajuda</dd>
+    </dl>
+    <form method="dialog"><button class="btn">Fechar</button></form>
+  </dialog>
 <script>
 function copyText(id, btn) {
   navigator.clipboard.writeText(document.getElementById(id).innerText).then(() => {
