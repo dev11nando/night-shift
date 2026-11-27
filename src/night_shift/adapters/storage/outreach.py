@@ -106,13 +106,24 @@ class OutreachRepository:
         self.s.flush()
         return row
 
-    def by_status(self, *statuses: OutreachStatus, limit: int = 200) -> Sequence[Outreach]:
-        return self.s.scalars(
-            select(Outreach)
-            .where(Outreach.status.in_(statuses))
-            .order_by(Outreach.created_at.desc())
-            .limit(limit)
-        ).all()
+    def by_status(
+        self, *statuses: OutreachStatus, with_email: bool | None = None, limit: int = 200
+    ) -> Sequence[Outreach]:
+        """Mensagens nesses status; ``with_email`` True/False separa as que já têm
+        destinatário das que não têm (None = todas)."""
+        q = select(Outreach).where(Outreach.status.in_(statuses))
+        if with_email is True:
+            q = q.where(Outreach.to_address.is_not(None))
+        elif with_email is False:
+            q = q.where(Outreach.to_address.is_(None))
+        return self.s.scalars(q.order_by(Outreach.created_at.desc()).limit(limit)).all()
+
+    def drafts_with_email(self) -> int:
+        return self.s.scalar(
+            select(func.count(Outreach.id)).where(
+                Outreach.status == OutreachStatus.DRAFT, Outreach.to_address.is_not(None)
+            )
+        )
 
     def counts(self) -> dict[str, int]:
         rows = self.s.execute(select(Outreach.status, func.count()).group_by(Outreach.status)).all()

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}night-shift{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}?v={{ asset_version }}">
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
 </head>
 <body>
@@ -15,13 +15,13 @@
       <a href="/ao-vivo" class="{{ 'active' if active == 'ao-vivo' }}">Ao vivo</a>
       <a href="/fila" class="{{ 'active' if active == 'fila' }}">Fila {% include "_queue_count.html" %}</a>
       <a href="/funil" class="{{ 'active' if active == 'funil' }}">Funil</a>
-      <a href="/outreach" class="{{ 'active' if active == 'outreach' }}">Outreach{% if ocounts and ocounts.get('draft') %} <span class="pill">{{ ocounts.get('draft') }}</span>{% endif %}</a>
+      <a href="/outreach" class="{{ 'active' if active == 'outreach' }}">Outreach{% if ready_emails %} <span class="pill" title="e-mails prontos para enviar">{{ ready_emails }}</span>{% endif %}</a>
       <a href="/mercado" class="{{ 'active' if active == 'mercado' }}">Mercado</a>
     </nav>
     <div class="top-actions">
       {% if can_start %}
       <button class="btn primary small" hx-post="/buscar"
-              hx-confirm="Buscar vagas agora? Coleta, dá nota e gera CV e carta. Usa o limite do seu plano Claude.">Buscar vagas</button>
+              hx-confirm="Buscar vagas agora? Coleta, dá nota e escreve cartas e e-mails. Usa o limite do seu plano Claude.">Buscar vagas</button>
       {% endif %}
       {% if can_turn_off %}
       <button class="btn danger small" hx-post="/system/off" hx-target="main" hx-swap="innerHTML"

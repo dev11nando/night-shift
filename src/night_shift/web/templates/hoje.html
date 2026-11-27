@@ -8,65 +8,112 @@
   </div>
 </div>
 
-{% if not last %}
-  <section class="empty">
-    <p>Nenhuma execução ainda.</p>
-    <p>Rode <code>uv run night-shift run</code> para coletar e avaliar as vagas.</p>
-  </section>
-{% else %}
+{# O que te espera: cada bloco leva para onde se resolve. #}
+<section class="todo">
+  <a class="todo-tile {{ 'hot' if emails_ready }}" href="/outreach?view=com-email">
+    <b>{{ emails_ready }}</b>
+    <span>e-mail{{ 's' if emails_ready != 1 }} pronto{{ 's' if emails_ready != 1 }} para enviar</span>
+    <small>Outreach com destinatário</small>
+  </a>
+  <a class="todo-tile {{ 'hot' if fresh }}" href="/fila?ordem=recentes">
+    <b>{{ fresh | length }}</b>
+    <span>vaga{{ 's' if fresh | length != 1 }} nova{{ 's' if fresh | length != 1 }} na fila</span>
+    <small>com nota nos últimos {{ fresh_days }} dias · {{ counts.queued }} no total</small>
+  </a>
+  <a class="todo-tile {{ 'warn' if waiting }}" href="/funil">
+    <b>{{ waiting | length }}</b>
+    <span>sem resposta há {{ follow_up_days }}+ dias</span>
+    <small>{{ 'hora de cobrar' if waiting else 'nada para cobrar' }}</small>
+  </a>
+  <a class="todo-tile" href="/ao-vivo">
+    {% if last %}
+      <b>#{{ last.id }}</b>
+      <span>última busca · {{ {'success': 'concluída', 'failed': 'falhou', 'stopped': 'parada', 'running': 'rodando'}[last.status] }}</span>
+      <small>{{ last.started_at | local_dt }} · {{ last.stats.get('new', 0) }} nova(s){% if last.errors %} · {{ last.errors | length }} erro(s){% endif %}</small>
+    {% else %}
+      <b>—</b><span>nenhuma busca ainda</span><small>use Buscar vagas</small>
+    {% endif %}
+  </a>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>{{ 'Melhores vagas novas' if fresh else 'Melhores da fila' }}</h2>
+    <span><a href="/fila?view=manual">Manual ({{ counts.manual }})</a> · <a href="/fila?view=auto">Automática ({{ counts.auto }})</a></span>
+  </div>
+  {% if best %}
+    <ul class="rows">
+    {% for sc in best %}
+      {% set j = sc.job %}
+      <li>
+        <span class="score small {{ sc.llm_score | score_class }}">{{ sc.llm_score }}</span>
+        <a href="{{ j.url }}" target="_blank" rel="noopener">{{ j.title }}</a>
+        <span class="muted">{{ j.company_name }}</span>
+        {% if j.stack %}<span class="tag stack stack-{{ j.stack }}">{{ {'python': 'Python', 'ia': 'IA', 'java': 'Java'}.get(j.stack, j.stack) }}</span>{% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+    {% if not fresh %}<p class="muted">Nenhuma vaga recebeu nota nos últimos {{ fresh_days }} dias; use <b>Buscar vagas</b> para atualizar.</p>{% endif %}
+  {% else %}
+    <p class="muted">A fila está vazia. Use <b>Buscar vagas</b> para coletar e dar nota.</p>
+  {% endif %}
+</section>
+
+{% if waiting %}
+<section>
+  <h2>Esperando resposta</h2>
+  <ul class="rows">
+  {% for a in waiting %}
+    <li>
+      <span class="muted">{{ (a.applied_at or a.updated_at) | local_dt }}</span>
+      <a href="{{ a.job.url }}" target="_blank" rel="noopener">{{ a.job.title }}</a>
+      <span class="muted">{{ a.job.company_name }}</span>
+    </li>
+  {% endfor %}
+  </ul>
+  <p class="muted">Mande uma mensagem curta ao recrutador ou mova no <a href="/funil">Funil</a> quando responderem.</p>
+</section>
+{% endif %}
+
+{% if last %}
+<details class="history">
+  <summary>Detalhes da última busca e histórico</summary>
   {% set st = last.stats %}
   <section class="run status-{{ last.status }}">
     <div class="run-head">
-      <h2>Última execução · #{{ last.id }}</h2>
+      <h2>Execução #{{ last.id }}</h2>
       <span class="status">{{ {'success': 'concluída', 'failed': 'falhou', 'stopped': 'parada', 'running': 'rodando'}[last.status] }}</span>
     </div>
     <p class="muted">{{ last.started_at | local_dt }} · {{ duration(last.started_at, last.finished_at) }}</p>
-
     <ol class="funnel">
       <li><b>{{ st.get('collected', 0) }}</b><span>coletadas</span></li>
       <li><b>{{ st.get('new', 0) }}</b><span>novas</span></li>
       <li><b>{{ st.get('passed_filter', 0) }}</b><span>passaram no filtro</span></li>
-      <li><b>{{ st.get('embedded', 0) }}</b><span>comparadas com o CV</span></li>
       <li><b>{{ st.get('llm_scored', 0) }}</b><span>avaliadas pelo LLM</span></li>
+      <li><b>{{ st.get('outreach', 0) }}</b><span>e-mails escritos</span></li>
     </ol>
-
     {% if last.errors %}
-      <details class="errors" open>
+      <details class="errors">
         <summary>{{ last.errors | length }} erro(s)</summary>
         <ul>{% for e in last.errors %}<li>{{ e }}</li>{% endfor %}</ul>
       </details>
     {% endif %}
   </section>
-
-  <section>
-    <div class="section-head">
-      <h2>Melhores desta execução</h2>
-      <span><a href="/fila?view=manual">Manual ({{ counts.manual }})</a> · <a href="/fila?view=auto">Automática ({{ counts.auto }})</a></span>
-    </div>
-    {% for sc in best %}
-      {% include "_card.html" %}
-    {% else %}
-      <p class="muted">Nenhuma vaga recebeu nota nesta execução.{% if counts.queued %} A fila ainda tem {{ counts.queued }} de antes.{% endif %}</p>
-    {% endfor %}
-  </section>
-
   {% if older %}
-  <section>
-    <h2>Execuções anteriores</h2>
-    <table>
-      <thead><tr><th>#</th><th>Início</th><th>Duração</th><th>Status</th><th>Novas</th><th>Avaliadas</th><th>Erros</th></tr></thead>
-      <tbody>
-      {% for r in older %}
-        <tr>
-          <td>{{ r.id }}</td><td>{{ r.started_at | local_dt }}</td>
-          <td>{{ duration(r.started_at, r.finished_at) }}</td><td>{{ r.status }}</td>
-          <td>{{ r.stats.get('new', 0) }}</td><td>{{ r.stats.get('llm_scored', 0) }}</td>
-          <td>{{ r.errors | length }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </section>
+  <table>
+    <thead><tr><th>#</th><th>Início</th><th>Duração</th><th>Status</th><th>Novas</th><th>Avaliadas</th><th>Erros</th></tr></thead>
+    <tbody>
+    {% for r in older %}
+      <tr>
+        <td>{{ r.id }}</td><td>{{ r.started_at | local_dt }}</td>
+        <td>{{ duration(r.started_at, r.finished_at) }}</td><td>{{ r.status }}</td>
+        <td>{{ r.stats.get('new', 0) }}</td><td>{{ r.stats.get('llm_scored', 0) }}</td>
+        <td>{{ r.errors | length }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
   {% endif %}
+</details>
 {% endif %}
 {% endblock %}

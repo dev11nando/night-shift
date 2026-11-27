@@ -235,3 +235,44 @@ tr:last-child td { border-bottom: 0; }
   .funnel { grid-template-columns: repeat(2, 1fr); }
   table { display: block; overflow-x: auto; }
 }
+
+/* ------------------------------------------------------------- Hoje: o que te espera */
+.todo { display: grid; grid-template-columns: repeat(4, 1fr); gap: .75rem; }
+.todo-tile {
+  display: flex; flex-direction: column; gap: .15rem; padding: 1rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); text-decoration: none; transition: border-color .15s, transform .15s;
+}
+.todo-tile:hover { border-color: var(--accent); transform: translateY(-1px); }
+.todo-tile b { font-size: 1.9rem; line-height: 1.1; }
+.todo-tile span { font-weight: 600; }
+.todo-tile small { color: var(--muted); }
+.todo-tile.hot { border-left: 4px solid var(--accent); }
+.todo-tile.hot b { color: var(--accent); }
+.todo-tile.warn { border-left: 4px solid var(--mid); }
+.todo-tile.warn b { color: var(--mid); }
+@media (max-width: 760px) { .todo { grid-template-columns: repeat(2, 1fr); } }
+
+.rows { list-style: none; padding: 0; margin: 0; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius); }
+.rows li { display: flex; align-items: center; gap: .6rem; padding: .55rem .8rem; flex-wrap: wrap; }
+.rows li + li { border-top: 1px solid var(--border); }
+.rows a { color: var(--text); font-weight: 600; text-decoration: none; }
+.rows a:hover { color: var(--accent); }
+.score.small { width: 2.1rem; height: 1.6rem; font-size: .85rem; border-radius: 6px; flex: none; }
+
+details.history { margin-top: 1rem; }
+details.history > summary { cursor: pointer; color: var(--muted); margin-bottom: 1rem; }
+
+/* ------------------------------------------------------------- Fila: busca */
+.filter .grow { flex: 1 1 14rem; }
+.filter input[type=search] {
+  width: 100%; padding: .35rem .6rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text); font: inherit;
+}
+.result-count { margin: 0 0 .75rem; }
+#results.htmx-request { opacity: .6; transition: opacity .15s; }
+.filter { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; }
+.filter label + label { margin-left: 0; }
+.filter label { display: flex; align-items: center; gap: .4rem; }
+.filter select { margin-left: 0; }

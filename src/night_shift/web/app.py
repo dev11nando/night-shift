@@ -19,7 +19,7 @@ from night_shift.adapters.storage.funnel import STAGES as FUNNEL_STAGES
 from night_shift.adapters.storage.funnel import FunnelRepository
 from night_shift.adapters.storage.models import Job
 from night_shift.adapters.storage.outreach import OutreachRepository
-from night_shift.adapters.storage.review import ReviewRepository
+from night_shift.adapters.storage.review import ORDERS, ReviewRepository
 from night_shift.application.outreach import linkedin_people_search
 from night_shift.domain.enums import ApplicationStatus, OutreachStatus
 from night_shift.domain.lanes import Lane, manual_reason
@@ -31,6 +31,10 @@ templates = Jinja2Templates(directory=HERE / "templates")
 # Abas da Fila: filas de pendentes (por lane) e decididas (por status).
 # Atualizações (a cada 2 s) esperando a tarefa disparada criar a execução nova.
 WAIT_POLLS = 20
+# Hoje: notas dos últimos N dias contam como novas; candidatura sem resposta há N dias
+# aparece para cobrar (o Teal sugere 1 e 2 semanas).
+FRESH_DAYS = 7
+FOLLOW_UP_DAYS = 7
 
 LANE_VIEWS = {"manual": Lane.MANUAL, "auto": Lane.AUTO}
 STATUS_VIEWS = {
@@ -93,7 +97,11 @@ def status_label(status) -> str:
     return STATUS_LABELS.get(str(status), str(status))
 
 
+# Muda sempre que o CSS muda: o navegador baixa o arquivo novo em vez de usar o do cache.
+ASSET_VERSION = str(int((HERE / "static" / "style.css").stat().st_mtime))
+
 templates.env.globals.update(
+    asset_version=ASSET_VERSION,
     status_label=status_label,
     duration=duration,
     version=__version__,
@@ -136,7 +144,9 @@ def create_app(
 
     def page(request: Request, name: str, repo: ReviewRepository, **ctx) -> HTMLResponse:
         ctx.setdefault("counts", repo.counts())
-        ctx.setdefault("ocounts", OutreachRepository(repo.s).counts())
+        orepo = OutreachRepository(repo.s)
+        ctx.setdefault("ocounts", orepo.counts())
+        ctx.setdefault("ready_emails", orepo.drafts_with_email())
         ctx.update(card_ctx(repo))
         ctx.setdefault("can_start", start_run is not None)
         ctx.setdefault("can_turn_off", on_turn_off is not None)
@@ -146,6 +156,7 @@ def create_app(
     def hoje(request: Request, repo: Repo):
         runs = repo.recent_runs(6)
         last = runs[0] if runs else None
+        fresh = repo.fresh_best(days=FRESH_DAYS)
         return page(
             request,
             "hoje.html",
@@ -153,7 +164,13 @@ def create_app(
             active="hoje",
             last=last,
             older=runs[1:],
-            best=repo.best_of_run(last) if last else [],
+            fresh=fresh,
+            # Sem nota nova na semana, mostra as melhores que ainda estão na fila.
+            best=fresh or repo.queue(limit=5),
+            emails_ready=OutreachRepository(repo.s).drafts_with_email(),
+            waiting=repo.awaiting_reply(days=FOLLOW_UP_DAYS),
+            fresh_days=FRESH_DAYS,
+            follow_up_days=FOLLOW_UP_DAYS,
             schedule=schedule_status() if schedule_status else None,
             can_turn_off=on_turn_off is not None,
         )
@@ -165,9 +182,13 @@ def create_app(
         view: Annotated[str, Query(pattern="^(manual|auto|aplicadas|descartadas)$")] = "manual",
         min_score: Annotated[int, Query(alias="min", ge=0, le=100)] = 0,
         stack: Annotated[str, Query(pattern="^(|python|ia|java)$")] = "",
+        q: Annotated[str, Query(max_length=100)] = "",
+        ordem: Annotated[str, Query(pattern="^(nota|recentes|empresa)$")] = "nota",
     ):
         if view in LANE_VIEWS:
-            scores = repo.queue(LANE_VIEWS[view], min_score, stack=stack or None)
+            scores = repo.queue(
+                LANE_VIEWS[view], min_score, stack=stack or None, search=q, order=ordem
+            )
         else:
             scores = repo.decided(STATUS_VIEWS[view])
         return page(
@@ -178,6 +199,9 @@ def create_app(
             view=view,
             min_score=min_score,
             stack=stack,
+            q=q,
+            ordem=ordem,
+            orders=ORDERS,
             scores=scores,
         )
 
@@ -208,26 +232,44 @@ def create_app(
 
     # --------------------------------------------------------------- outreach
 
+    # (status, com e-mail?) de cada aba; "pendentes" é o nome antigo de "com-email".
     OUTREACH_VIEWS = {
-        "pendentes": (OutreachStatus.DRAFT,),
-        "enviadas": (OutreachStatus.SENT, OutreachStatus.REPLIED),
-        "descartadas": (OutreachStatus.DISCARDED,),
+        "com-email": ((OutreachStatus.DRAFT,), True),
+        "sem-email": ((OutreachStatus.DRAFT,), False),
+        "enviadas": ((OutreachStatus.SENT, OutreachStatus.REPLIED), None),
+        "descartadas": ((OutreachStatus.DISCARDED,), None),
     }
+
+    def outreach_cv() -> str | None:
+        """O CV Python em português (código 11), o que vai anexo no e-mail de outreach."""
+        if cv_dir is None:
+            return None
+        found = sorted(cv_dir.glob("cv_*_11[0-9][0-9][0-9].pdf"))
+        return found[0].name if found else None
 
     @app.get("/outreach", response_class=HTMLResponse)
     def outreach_page(
         request: Request,
         repo: Repo,
-        view: Annotated[str, Query(pattern="^(pendentes|enviadas|descartadas)$")] = "pendentes",
+        view: Annotated[
+            str, Query(pattern="^(|pendentes|com-email|sem-email|enviadas|descartadas)$")
+        ] = "",
     ):
         orepo = OutreachRepository(repo.s)
+        with_email = orepo.drafts_with_email()
+        if view in ("", "pendentes"):
+            # Abre no que dá para enviar agora; sem nenhum e-mail pronto, nos de LinkedIn.
+            view = "com-email" if with_email or not orepo.counts().get("draft") else "sem-email"
+        statuses, has_email = OUTREACH_VIEWS[view]
         return page(
             request,
             "outreach.html",
             repo,
             active="outreach",
             view=view,
-            items=orepo.by_status(*OUTREACH_VIEWS[view]),
+            items=orepo.by_status(*statuses, with_email=has_email),
+            with_email=with_email,
+            outreach_cv=outreach_cv(),
             daily_limit=outreach_daily_limit,
         )
 
