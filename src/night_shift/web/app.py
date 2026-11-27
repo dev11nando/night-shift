@@ -1,5 +1,6 @@
 """Painel local: relatório da noite, fila de revisão e mercado (docs/ESCOPO.md §8)."""
 
+import json
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -75,6 +76,17 @@ def score_class(score: int | None) -> str:
 templates.env.filters.update(brl=brl, local_dt=local_dt, score_class=score_class)
 
 
+def toast(response: Response, message: str, undo: str | None = None, card: str | None = None):
+    """Aviso rápido no canto da tela (evento ``toast`` do htmx, tratado em app.js); com
+    ``undo``, o aviso traz um botão Desfazer que aciona o desfazer do cartão ``card``.
+
+    O campo não pode se chamar ``target``: no HX-Trigger, o htmx usa ``target`` para
+    escolher onde disparar o evento, e ``null`` ali quebra a resposta."""
+    payload = {"message": message, "undo": undo, "card": card}
+    response.headers["HX-Trigger"] = json.dumps({"toast": payload})  # ASCII: cabe no header
+    return response
+
+
 def gmail_compose(to: str, subject: str, body: str) -> str:
     """Abre o Gmail na web com o e-mail pronto (você anexa o CV e envia)."""
     query = urlencode({"view": "cm", "fs": "1", "to": to, "su": subject, "body": body})
@@ -97,8 +109,8 @@ def status_label(status) -> str:
     return STATUS_LABELS.get(str(status), str(status))
 
 
-# Muda sempre que o CSS muda: o navegador baixa o arquivo novo em vez de usar o do cache.
-ASSET_VERSION = str(int((HERE / "static" / "style.css").stat().st_mtime))
+# Muda sempre que um arquivo estático muda: o navegador baixa o novo em vez do cache.
+ASSET_VERSION = str(int(max(f.stat().st_mtime for f in (HERE / "static").iterdir())))
 
 templates.env.globals.update(
     asset_version=ASSET_VERSION,
@@ -216,7 +228,14 @@ def create_app(
             raise HTTPException(404, "vaga não encontrada") from e
         template = "_card.html" if status is None else "_decided.html"
         ctx = {"sc": score, "counts": repo.counts(), "oob": True, **card_ctx(repo)}
-        return templates.TemplateResponse(request, template, ctx)
+        response = templates.TemplateResponse(request, template, ctx)
+        title = f"{score.job.title} · {score.job.company_name}"
+        if status is None:
+            return toast(response, f"De volta na fila: {title}")
+        verb = (
+            "Marcada como aplicada" if status is ApplicationStatus.APPLIED_MANUAL else "Descartada"
+        )
+        return toast(response, f"{verb}: {title}", f"/jobs/{job_id}/undo", f"#job-{job_id}")
 
     @app.post("/jobs/{job_id}/done", response_class=HTMLResponse)
     def done(request: Request, repo: Repo, job_id: int):
@@ -291,7 +310,16 @@ def create_app(
         except NoResultFound as e:
             raise HTTPException(404, "mensagem não encontrada") from e
         ctx = {"o": row, "counts": repo.counts(), "oob": True, **card_ctx(repo)}
-        return templates.TemplateResponse(request, "_outreach_card.html", ctx)
+        response = templates.TemplateResponse(request, "_outreach_card.html", ctx)
+        name = row.company.name
+        messages = {
+            "sent": f"Marcada como enviada: {name}",
+            "discard": f"Descartada: {name}",
+            "replied": f"Responderam: {name}",
+            "undo": f"De volta para enviar: {name}",
+        }
+        undo = None if action == "undo" else f"/outreach/{outreach_id}/undo"
+        return toast(response, messages[action], undo, f"#outreach-{outreach_id}")
 
     # ------------------------------------------------------------------ funil
 
@@ -319,10 +347,12 @@ def create_app(
         if request.headers.get("HX-Request") != "true":
             raise HTTPException(403, "use o painel")
         try:
-            FunnelRepository(repo.s).move(job_id, to)
+            app_row = FunnelRepository(repo.s).move(job_id, to)
         except (KeyError, NoResultFound) as e:
             raise HTTPException(404, "candidatura ou etapa não encontrada") from e
-        return templates.TemplateResponse(request, "_board.html", board_ctx(repo))
+        response = templates.TemplateResponse(request, "_board.html", board_ctx(repo))
+        stage = status_label(app_row.status)
+        return toast(response, f"{app_row.job.title}: {stage}")
 
     @app.post("/jobs/{job_id}/notas", response_class=HTMLResponse)
     def anotar(request: Request, repo: Repo, job_id: int, texto: Annotated[str, Form()]):

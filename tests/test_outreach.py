@@ -388,8 +388,10 @@ def test_outreach_page_and_actions(sessions):
     assert 'title="e-mails prontos para enviar">1</span>' in html
 
     assert client.post(f"/outreach/{oid}/sent").status_code == 403
-    sent = client.post(f"/outreach/{oid}/sent", headers=HX).text
+    resp = client.post(f"/outreach/{oid}/sent", headers=HX)
+    sent = resp.text
     assert "Responderam" in sent
+    assert f'"undo": "/outreach/{oid}/undo"' in resp.headers["HX-Trigger"]
     with sessions() as s:
         row = s.get(Outreach, oid)
         assert row.status is OutreachStatus.SENT and row.company.last_contacted_at is not None

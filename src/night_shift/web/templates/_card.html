@@ -1,64 +1,74 @@
 {% set j = sc.job %}
 {% set app = j.application %}
-<article class="card" id="job-{{ j.id }}">
-  <div class="score {{ sc.llm_score | score_class }}" title="similaridade {{ '%.2f' % sc.embed_similarity if sc.embed_similarity is not none else '—' }}">{{ sc.llm_score if sc.llm_score is not none else '—' }}</div>
+{% set decided = app and app.status in ('applied_manual', 'auto_applied', 'discarded') %}
+{# Cartão compacto: nota, cargo, empresa e o porquê em uma linha; o resto abre em "Detalhes". #}
+<article class="card compact" id="job-{{ j.id }}">
+  <div class="score small {{ sc.llm_score | score_class }}" title="similaridade {{ '%.2f' % sc.embed_similarity if sc.embed_similarity is not none else '—' }}">{{ sc.llm_score if sc.llm_score is not none else '—' }}</div>
   <div class="body">
     <h3><a href="{{ j.url }}" target="_blank" rel="noopener">{{ j.title }}</a></h3>
     <p class="meta">
       <strong>{{ j.company_name }}</strong>
-      <span>{{ j.location or 'local não informado' }}</span>
-      {% if j.work_model %}<span class="tag">{{ j.work_model }}</span>{% endif %}
       {% if j.stack %}<span class="tag stack stack-{{ j.stack }}">{{ {'python': 'Python', 'ia': 'IA', 'java': 'Java'}.get(j.stack, j.stack) }}</span>{% endif %}
       {% if j.level %}<span class="tag">{{ j.level }}</span>{% endif %}
-      {% if j.contract %}<span class="tag">{{ j.contract | upper }}</span>{% endif %}
       {% if j.salary_min or j.salary_max %}<span class="tag money">{{ j.salary_min | brl }}{% if j.salary_max %} a {{ j.salary_max | brl }}{% endif %}</span>{% endif %}
-      <span class="muted">{{ j.source }}</span>
+      {% if sc.red_flags %}<span class="tag flag" title="{{ sc.red_flags | join(' · ') }}">{{ sc.red_flags | length }} alerta{{ 's' if sc.red_flags | length != 1 }}</span>{% endif %}
+      <span class="muted">{{ j.location or 'local não informado' }}</span>
     </p>
-    {% if not (app and app.status in ('applied_manual', 'auto_applied', 'discarded')) %}
-      {% if lane_of(sc) == 'auto' %}
-        <p class="lane auto">Fila automática</p>
-      {% else %}
-        <p class="lane manual">Fila manual · {{ reason_of(sc) }}</p>
+    {% if sc.rationale %}<p class="rationale clamp">{{ sc.rationale }}</p>{% endif %}
+
+    <details class="more">
+      <summary>Detalhes</summary>
+      <p class="meta">
+        {% if j.work_model %}<span class="tag">{{ j.work_model }}</span>{% endif %}
+        {% if j.contract %}<span class="tag">{{ j.contract | upper }}</span>{% endif %}
+        <span class="muted">{{ j.source }}</span>
+      </p>
+      {% if not decided %}
+        {% if lane_of(sc) == 'auto' %}
+          <p class="lane auto">Fila automática</p>
+        {% else %}
+          <p class="lane manual">Fila manual · {{ reason_of(sc) }}</p>
+        {% endif %}
       {% endif %}
-    {% endif %}
-    {% if sc.rationale %}<p class="rationale">{{ sc.rationale }}</p>{% endif %}
-    {% if sc.red_flags %}
-    <ul class="flags">{% for f in sc.red_flags %}<li>{{ f }}</li>{% endfor %}</ul>
-    {% endif %}
-    {% set apply = (app.answers or {}).get('apply') if app else none %}
-    {% if apply %}
-    <p class="apply-info">
-      {% if app.status == 'auto_applied' %}<span class="ok">Aplicada com o night-shift</span>{% else %}
-      Formulário testado ({{ apply.status }}){% endif %}
-      · {{ apply.filled | length }} campo(s) preenchido(s){% if apply.resume_attached %}, CV anexado{% endif %}
-      {% if apply.unanswered_required %}· <span class="warn">{{ apply.unanswered_required | length }} obrigatório(s) para você</span>{% endif %}
-      {% if apply.captcha %}· captcha ({{ apply.captcha }}){% endif %}
-      {% if apply.filled_shot %}· <a href="/jobs/{{ j.id }}/shot/preenchido" target="_blank">print do preenchimento</a>{% endif %}
-      {% if apply.confirmed_shot %}· <a href="/jobs/{{ j.id }}/shot/confirmado" target="_blank">print da confirmação</a>{% endif %}
-    </p>
-    {% endif %}
-    {% if app and app.cover_letter %}
-    <details class="letter">
-      <summary>Carta de apresentação</summary>
-      {% set subject = (app.answers or {}).get('letter_subject') %}
-      {% if subject %}<p class="muted">Assunto: {{ subject }}</p>{% endif %}
-      <div class="letter-body" id="letter-{{ j.id }}">{{ app.cover_letter }}</div>
-      <button class="btn ghost" type="button" onclick="navigator.clipboard.writeText(document.getElementById('letter-{{ j.id }}').innerText); this.textContent='Copiada'">Copiar carta</button>
-    </details>
-    {% endif %}
-    <details>
-      <summary>Descrição</summary>
-      <div class="description">{{ j.description[:3000] }}{% if j.description | length > 3000 %}…{% endif %}</div>
+      {% if sc.rationale %}<p class="rationale">{{ sc.rationale }}</p>{% endif %}
+      {% if sc.red_flags %}
+      <ul class="flags">{% for f in sc.red_flags %}<li>{{ f }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% set apply = (app.answers or {}).get('apply') if app else none %}
+      {% if apply %}
+      <p class="apply-info">
+        {% if app.status == 'auto_applied' %}<span class="ok">Aplicada com o night-shift</span>{% else %}
+        Formulário testado ({{ apply.status }}){% endif %}
+        · {{ apply.filled | length }} campo(s) preenchido(s){% if apply.resume_attached %}, CV anexado{% endif %}
+        {% if apply.unanswered_required %}· <span class="warn">{{ apply.unanswered_required | length }} obrigatório(s) para você</span>{% endif %}
+        {% if apply.captcha %}· captcha ({{ apply.captcha }}){% endif %}
+        {% if apply.filled_shot %}· <a href="/jobs/{{ j.id }}/shot/preenchido" target="_blank">print do preenchimento</a>{% endif %}
+        {% if apply.confirmed_shot %}· <a href="/jobs/{{ j.id }}/shot/confirmado" target="_blank">print da confirmação</a>{% endif %}
+      </p>
+      {% endif %}
+      {% if app and app.cover_letter %}
+      <details class="letter">
+        <summary>Carta de apresentação</summary>
+        {% set subject = (app.answers or {}).get('letter_subject') %}
+        {% if subject %}<p class="muted">Assunto: {{ subject }}</p>{% endif %}
+        <div class="letter-body" id="letter-{{ j.id }}">{{ app.cover_letter }}</div>
+        <button class="btn ghost" type="button" onclick="copyText('letter-{{ j.id }}', this)">Copiar carta</button>
+      </details>
+      {% endif %}
+      <details>
+        <summary>Descrição</summary>
+        <div class="description">{{ j.description[:3000] }}{% if j.description | length > 3000 %}…{% endif %}</div>
+      </details>
     </details>
   </div>
   <div class="actions">
-    <a class="btn" href="{{ j.url }}" target="_blank" rel="noopener">Abrir vaga</a>
-    {% if app and app.cv_variant_path %}<a class="btn" href="/jobs/{{ j.id }}/cv" target="_blank" rel="noopener">CV {{ app.cv_variant_path.replace('\\', '/').split('/')[-1] }}</a>{% endif %}
-    {% if app and app.status in ('applied_manual', 'auto_applied', 'discarded') %}
-      <button class="btn" hx-post="/jobs/{{ j.id }}/undo" hx-target="#job-{{ j.id }}" hx-swap="outerHTML">Voltar para fila</button>
+    <a class="btn small" href="{{ j.url }}" target="_blank" rel="noopener" data-key="a" title="Abrir vaga (a)">Abrir vaga</a>
+    {% if app and app.cv_variant_path %}<a class="btn small" href="/jobs/{{ j.id }}/cv" target="_blank" rel="noopener" data-key="c" title="{{ app.cv_variant_path.replace('\\', '/').split('/')[-1] }} (c)">CV {{ app.cv_variant_path.replace('\\', '/').split('/')[-1][-9:-4] }}</a>{% endif %}
+    {% if decided %}
+      <button class="btn small" hx-post="/jobs/{{ j.id }}/undo" hx-target="#job-{{ j.id }}" hx-swap="outerHTML">Voltar para fila</button>
     {% else %}
-      <button class="btn primary" hx-post="/jobs/{{ j.id }}/done" hx-target="#job-{{ j.id }}" hx-swap="outerHTML" title="Já me candidatei">Done</button>
-      <button class="btn ghost" hx-post="/jobs/{{ j.id }}/discard" hx-target="#job-{{ j.id }}" hx-swap="outerHTML">Descartar</button>
+      <button class="btn primary small" hx-post="/jobs/{{ j.id }}/done" hx-target="#job-{{ j.id }}" hx-swap="outerHTML" data-key="d" title="Já me candidatei (d)">Done</button>
+      <button class="btn ghost small" hx-post="/jobs/{{ j.id }}/discard" hx-target="#job-{{ j.id }}" hx-swap="outerHTML" data-key="x" title="Descartar (x)">Descartar</button>
     {% endif %}
   </div>
 </article>

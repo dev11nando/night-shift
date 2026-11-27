@@ -111,8 +111,10 @@ def test_funnel_page_move_and_note(sessions):
     assert "Vaga a" in html and "Teve resposta" in html and ">Funil</a>" in html
 
     assert client.post(f"/funil/{job_id}/mover/resposta").status_code == 403
-    moved = client.post(f"/funil/{job_id}/mover/resposta", headers=HX).text
+    resp = client.post(f"/funil/{job_id}/mover/resposta", headers=HX)
+    moved = resp.text
     assert "Entrevista marcada" in moved, "card agora na coluna Resposta"
+    assert '"message": "Vaga a: resposta"' in resp.headers["HX-Trigger"]
     assert "<b>1</b><span>resposta</span>" in moved
 
     noted = client.post(f"/jobs/{job_id}/notas", data={"texto": "entrevista dia 5"}, headers=HX)
